@@ -36,6 +36,7 @@ class SettingsRepository @Inject constructor(
         val REMOTE_BASE_URL = stringPreferencesKey("remote_base_url")
         val REMOTE_API_KEY = stringPreferencesKey("remote_api_key")
         val REMOTE_MODEL = stringPreferencesKey("remote_model")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val INTERNET_ENABLED = booleanPreferencesKey("internet_enabled")
         val EXTRACTION_ENABLED = booleanPreferencesKey("extraction_enabled")
         val CRITIC_ENABLED = booleanPreferencesKey("critic_enabled")
@@ -50,10 +51,15 @@ class SettingsRepository @Inject constructor(
             remoteBaseUrl = prefs[REMOTE_BASE_URL] ?: DEFAULT_BASE_URL,
             remoteApiKey = prefs[REMOTE_API_KEY] ?: "",
             remoteModel = prefs[REMOTE_MODEL] ?: DEFAULT_MODEL,
+            onboardingCompleted = prefs[ONBOARDING_COMPLETED] ?: false,
             internetEnabled = prefs[INTERNET_ENABLED] ?: false,
             extractionEnabled = prefs[EXTRACTION_ENABLED] ?: true,
             criticEnabled = prefs[CRITIC_ENABLED] ?: true
         )
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        ctx.dataStore.edit { it[ONBOARDING_COMPLETED] = completed }
     }
 
     suspend fun updateRemoteConfig(enabled: Boolean, baseUrl: String, apiKey: String, model: String) {
@@ -83,7 +89,19 @@ data class AppSettings(
     val remoteBaseUrl: String = SettingsRepository.DEFAULT_BASE_URL,
     val remoteApiKey: String = "",
     val remoteModel: String = SettingsRepository.DEFAULT_MODEL,
+    val onboardingCompleted: Boolean = false,
     val internetEnabled: Boolean = false,
     val extractionEnabled: Boolean = true,
     val criticEnabled: Boolean = true
 )
+
+/**
+ * Hilt entry point for accessing SettingsRepository from a Composable
+ * (where we can't use @Inject). Used by BabymomoApp() to check onboarding state.
+ */
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface OnboardingEntryPoint {
+    fun settingsRepository(): SettingsRepository
+}
+

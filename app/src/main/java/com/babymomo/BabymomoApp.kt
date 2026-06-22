@@ -22,6 +22,7 @@ class BabymomoApp : Application(), Configuration.Provider {
     @Inject lateinit var memoryMaintenance: MemoryMaintenance
     @Inject lateinit var settingsRepo: SettingsRepository
     @Inject lateinit var remoteProvider: RemoteLlmProvider
+    @Inject lateinit var modelManager: com.babymomo.model.ModelManager
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -35,8 +36,9 @@ class BabymomoApp : Application(), Configuration.Provider {
         super.onCreate()
         File(filesDir, "models").mkdirs()
         appScope.launch {
-            // Apply persisted remote LLM settings to the live provider on startup.
-            // This fixes the v0.3 bug where settings were ephemeral and lost on restart.
+            // Seed the model catalog so the onboarding screen can find the default model
+            runCatching { modelManager.seedCatalogIfEmpty() }
+            // Apply persisted remote LLM settings to the live provider on startup
             runCatching {
                 val s = settingsRepo.settings.first()
                 if (s.remoteEnabled && s.remoteApiKey.isNotBlank()) {
