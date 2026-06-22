@@ -13,7 +13,8 @@ import javax.inject.Singleton
 class MemoryMaintenance @Inject constructor(
     private val memoryDao: MemoryDao,
     private val metaDao: MetaDao,
-    private val memoryService: MemoryService
+    private val memoryService: MemoryService,
+    private val embedderProvider: EmbedderProvider
 ) {
     suspend fun runStartupSweep() = withContext(Dispatchers.Default) {
         ensureMetaKeys()
@@ -31,10 +32,16 @@ class MemoryMaintenance @Inject constructor(
     }
 
     private suspend fun ensureMetaKeys() {
+        // Resolve the live embedder so the persisted `embedding_model` /
+        // `embedding_dims` keys reflect whatever EmbedderProvider is actually
+        // routing to (real BGE ONNX when its asset is shipped, MockEmbedder
+        // otherwise). This drives diagnostics + future migrations.
+        val activeModel = embedderProvider.modelName()
+        val activeDims = embedderProvider.dims().toString()
         val defaults = listOf(
             "schema_version" to "1",
-            "embedding_model" to "mock-hash-384",
-            "embedding_dims" to "384",
+            "embedding_model" to activeModel,
+            "embedding_dims" to activeDims,
             "extraction_model" to "none",
             "created_at" to System.currentTimeMillis().toString()
         )
