@@ -18,6 +18,9 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -33,107 +36,183 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
-fun SettingsScreen() {
-    var remoteEnabled by remember { mutableStateOf(false) }
-    var remoteUrl by remember { mutableStateOf("https://api.openai.com/v1") }
-    var remoteKey by remember { mutableStateOf("") }
-    var remoteModel by remember { mutableStateOf("gpt-4o-mini") }
-    var internetEnabled by remember { mutableStateOf(false) }
-    var extractionEnabled by remember { mutableStateOf(true) }
-    var criticEnabled by remember { mutableStateOf(true) }
+fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+
+    // Local mutable copies for the remote fields — committed on each change
+    var remoteEnabled by remember(settings.remoteEnabled) { mutableStateOf(settings.remoteEnabled) }
+    var remoteUrl by remember(settings.remoteBaseUrl) { mutableStateOf(settings.remoteBaseUrl) }
+    var remoteKey by remember(settings.remoteApiKey) { mutableStateOf(settings.remoteApiKey) }
+    var remoteModel by remember(settings.remoteModel) { mutableStateOf(settings.remoteModel) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // About card
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = RoundedCornerShape(18.dp),
-            tonalElevation = 1.dp,
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     "BABYMOMO",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "v0.1.0 — Offline-first AI companion\nMemory graph · Multi-agent · Skills · Project System",
+                    "v0.4.0 — Real AI companion\nMemory graph · Multi-agent · Skills · Projects",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }
 
-        SectionCard(
-            title = "Privacy",
-            icon = Icons.Rounded.Lock
+        // REMOTE LLM — the critical section. Pre-configured for Groq (free + fast).
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            SettingRow(
-                title = "Internet research",
-                subtitle = "Allow the Research agent to query the web. Off by default.",
-                checked = internetEnabled,
-                onCheckedChange = { internetEnabled = it }
-            )
-        }
-
-        SectionCard(
-            title = "Remote LLM",
-            icon = Icons.Rounded.Bolt,
-            subtitle = "Optional escape hatch. When enabled, BABYMOMO falls back to this provider when no local model is loaded — your data goes to the provider you choose."
-        ) {
-            SettingRow(
-                title = "Enable remote provider",
-                subtitle = "Off by default. Falls back when no local model is loaded.",
-                checked = remoteEnabled,
-                onCheckedChange = { remoteEnabled = it }
-            )
-            if (remoteEnabled) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = remoteUrl, onValueChange = { remoteUrl = it }, label = { Text("Base URL") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = remoteKey, onValueChange = { remoteKey = it }, label = { Text("API key") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = remoteModel, onValueChange = { remoteModel = it }, label = { Text("Model name") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Bolt, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("AI Brain", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Works with: OpenAI, Groq, OpenRouter, Ollama (10.0.2.2:11434 from emulator, LAN IP from a real phone)",
+                    "Connect a free Groq API key to get REAL AI responses instantly. " +
+                    "Groq is free, blazing fast, and runs Llama 3.3 70B. " +
+                    "Your conversations stay between you and Groq.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(16.dp))
+
+                // Enable toggle
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Enable AI brain", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            if (remoteEnabled) "Connected — real AI responses are live" else "Off — using mock brain (canned responses)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (remoteEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = remoteEnabled,
+                        onCheckedChange = {
+                            remoteEnabled = it
+                            vm.updateRemoteConfig(remoteEnabled, remoteUrl, remoteKey, remoteModel)
+                        }
+                    )
+                }
+
+                if (remoteEnabled) {
+                    Spacer(Modifier.height(16.dp))
+                    // API key field — the most important input
+                    OutlinedTextField(
+                        value = remoteKey,
+                        onValueChange = {
+                            remoteKey = it
+                            vm.updateRemoteConfig(remoteEnabled, remoteUrl, remoteKey, remoteModel)
+                        },
+                        label = { Text("Groq API Key") },
+                        placeholder = { Text("gsk_...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Get a FREE key at console.groq.com → API Keys",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        textDecoration = TextDecoration.Underline
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                    // Advanced settings (collapsible in a real app — keeping flat for v0.4)
+                    Text("Advanced", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = remoteUrl,
+                        onValueChange = {
+                            remoteUrl = it
+                            vm.updateRemoteConfig(remoteEnabled, remoteUrl, remoteKey, remoteModel)
+                        },
+                        label = { Text("Base URL") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = remoteModel,
+                        onValueChange = {
+                            remoteModel = it
+                            vm.updateRemoteConfig(remoteEnabled, remoteUrl, remoteKey, remoteModel)
+                        },
+                        label = { Text("Model name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Also works with: OpenAI (api.openai.com/v1), OpenRouter, Ollama (10.0.2.2:11434 from emulator). " +
+                        "Popular Groq models: llama-3.3-70b-versatile, llama-3.1-8b-instant",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
-        SectionCard(
-            title = "Memory extraction",
-            icon = Icons.Rounded.Memory
-        ) {
+        // Privacy
+        SectionCard(title = "Privacy", icon = Icons.Rounded.Lock) {
             SettingRow(
-                title = "Auto-extract memories from chat",
-                subtitle = "After each turn, MOMO extracts entities, relations, and facts into the memory graph.",
-                checked = extractionEnabled,
-                onCheckedChange = { extractionEnabled = it }
+                title = "Internet research",
+                subtitle = "Allow the Research agent to query the web. Off by default.",
+                checked = settings.internetEnabled,
+                onCheckedChange = { vm.setInternetEnabled(it) }
             )
         }
 
-        SectionCard(
-            title = "Agents",
-            icon = Icons.Rounded.Shield
-        ) {
+        // Memory
+        SectionCard(title = "Memory", icon = Icons.Rounded.Memory) {
             SettingRow(
-                title = "Critic agent (high-stakes verification)",
-                subtitle = "When on, the Critic agent verifies plans and factual answers before they're returned to you.",
-                checked = criticEnabled,
-                onCheckedChange = { criticEnabled = it }
+                title = "Auto-extract memories from chat",
+                subtitle = "After each turn, MOMO extracts entities, relations, and facts into the memory graph.",
+                checked = settings.extractionEnabled,
+                onCheckedChange = { vm.setExtractionEnabled(it) }
             )
         }
+
+        // Agents
+        SectionCard(title = "Agents", icon = Icons.Rounded.Shield) {
+            SettingRow(
+                title = "Critic agent",
+                subtitle = "Verifies plans and factual answers before returning them.",
+                checked = settings.criticEnabled,
+                onCheckedChange = { vm.setCriticEnabled(it) }
+            )
+        }
+
+        Spacer(Modifier.height(32.dp))
     }
 }
 
@@ -141,38 +220,19 @@ fun SettingsScreen() {
 private fun SectionCard(
     title: String,
     icon: ImageVector,
-    subtitle: String? = null,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        shape = RoundedCornerShape(18.dp),
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            if (subtitle != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(12.dp))
             content()
@@ -184,7 +244,7 @@ private fun SectionCard(
 private fun SettingRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(2.dp))
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
