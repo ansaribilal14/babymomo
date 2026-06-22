@@ -26,11 +26,15 @@ class MemoryRecaller @Inject constructor(
                               else emptySet()
 
         val now = System.currentTimeMillis()
-        val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000
         val reranked = hits.map { hit ->
             val graphProx = if (entityMemoryIds.contains(hit.id)) 1.0f else 0.0f
-            val recencyDecay = kotlin.math.exp(-(now - hit.createdAt).toDouble() / THIRTY_DAYS_MS).toFloat()
-            val score = 0.5f * hit.score + 0.2f * graphProx + 0.2f * hit.confidence + 0.1f * recencyDecay
+            val score = computeRerankScore(
+                cosineSimilarity = hit.score,
+                graphProximity = graphProx,
+                confidence = hit.confidence,
+                ageInMillis = now - hit.createdAt,
+                now = now
+            )
             RerankCandidate(hit, score)
         }.sortedByDescending { it.score }.take(topK)
 
@@ -50,4 +54,33 @@ class MemoryRecaller @Inject constructor(
     }
 
     private data class RerankCandidate(val hit: SearchHit, val score: Float)
+
+    internal companion object {
+        /** 30 days in milliseconds — recency-decay time constant for the reranker. */
+        internal const val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000
+
+        /**
+         * 4-signal rerank score: 0.5·cosine + 0.2·graph_proximity + 0.2·confidence + 0.1·recency_decay.
+         *
+         * Recency decays as `exp(-age / 30 days)` — a memory 30 days old gets ~37% of the recency
+         * weight, 60 days old ~13%, 90 days old ~5%. The cosine similarity dominates (weight 0.5)
+         * because it's the strongest signal of topical relevance; graph proximity (0.2) rewards
+         * memories tied to entities mentioned in the query; confidence (0.2) rewards extraction
+         * quality; recency (0.1) is a gentle tie-breaker that prefers fresher facts.
+         *
+         * Extracted as `internal` so unit tests can verify the math without spinning up the full
+         * recall pipeline (embedder + vector index + graph + memory service). The [now] parameter
+         * is accepted explicitly so tests can pin the time base.
+         */
+        internal fun computeRerankScore(
+            cosineSimilarity: Float,
+            graphProximity: Float,
+            confidence: Float,
+            ageInMillis: Long,
+            now: Long = System.currentTimeMillis()
+        ): Float {
+            val recencyDecay = kotlin.math.exp(-(now - (now - ageInMillis)).toDouble() / THIRTY_DAYS_MS).toFloat()
+            return 0.5f * cosineSimilarity + 0.2f * graphProximity + 0.2f * confidence + 0.1f * recencyDecay
+        }
+    }
 }
