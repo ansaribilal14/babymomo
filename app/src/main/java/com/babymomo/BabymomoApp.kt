@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -27,6 +28,8 @@ class BabymomoApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // Ensure the model download directory exists before any worker tries to write to it.
+        File(filesDir, "models").mkdirs()
         appScope.launch {
             runCatching { MemoryMaintenanceWorker.enqueue(this@BabymomoApp) }
             runCatching { memoryMaintenance.runStartupSweep() }
