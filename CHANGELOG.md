@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Real on-device LLM inference via MediaPipe GenAI** for Gemma models in `.task` format. `LocalLlmProvider` now dispatches to a new `MediapipeLlmEngine` (wrapping `com.google.mediapipe:genai-text-llm-inference-android:0.10.14`) when the active model's runtime is `MEDIAPIPE_GENAI`. Real streaming (partial-result callback → token deltas) is supported; non-MediaPipe runtimes still fall through to Remote / Mock.
+- **Two Gemma models added to the catalog in MediaPipe `.task` format**: `gemma-2b-it-mediapipe` (int8, ~1.7 GB) and `gemma-1b-it-mediapipe` (int4, ~1.4 GB, fits low-RAM devices). Both run via MediaPipe GenAI — no GGUF / llama.cpp JNI required.
+
 ### Planned for v0.2
-- Wire `MediaPipe GenAI` or `llama.cpp` JNI bridge into `LocalLlmProvider` so downloaded models actually run on-device.
+- Wire `llama.cpp` JNI bridge into `LocalLlmProvider` for the existing GGUF catalog entries (Phi-3 / Qwen / Llama / SmolLM2). MediaPipe GenAI was wired first as the fastest path to real on-device inference; llama.cpp is the follow-up for arbitrary-GGUF support.
 - Bundle `bge-small-en-v1.5` int8 ONNX (~33 MB) as an asset and wire `OnnxEmbedder`.
-- Implement `ModelDownloadWorker` to fetch GGUF files from HuggingFace.
+- Implement `ModelDownloadWorker` to fetch `.task` / GGUF files from their respective hosts.
 - First-launch onboarding flow that prompts the user to pick + download a model.
 - Graph visualization screen (currently entities/relations are queryable but not visually browsable).
 - Recursive CTE graph traversal in Room for multi-hop queries.

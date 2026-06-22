@@ -47,6 +47,11 @@ object LlmModule {
 
     @Provides @Singleton @MockLlm
     fun provideMockProvider(p: MockLlmProvider): LlmProvider = p
+
+    // NOTE: MediapipeLlmEngine is provided via @Inject constructor (@ApplicationContext Context).
+    // No explicit @Provides needed — Hilt resolves it automatically and injects it into
+    // LocalLlmProvider. The model path is set at runtime via MediapipeLlmEngine.configure(path),
+    // mirroring the RemoteLlmProvider.configure(baseUrl, apiKey, modelName) pattern.
 }
 
 @Module

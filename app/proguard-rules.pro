@@ -23,3 +23,12 @@
 -keep class com.babymomo.core.skills.** { *; }
 -keep class com.babymomo.core.projects.** { *; }
 -keep class com.babymomo.model.** { *; }
+
+# MediaPipe GenAI — LlmInference uses reflection/JNI to load native libs and task graph classes.
+# Without these keeps, R8 strips the genai classes and the runtime crashes at createFromOptions().
+-keep class com.google.mediapipe.** { *; }
+-keep class com.google.mediapipe.genai.** { *; }
+-keep class com.google.mediapipe.tasks.genai.** { *; }
+-keep class com.google.mediapipe.tasks.core.** { *; }
+-keepclassmembers class com.google.mediapipe.** { *; }
+-dontwarn com.google.mediapipe.**

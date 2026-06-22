@@ -69,7 +69,26 @@ class ModelManager @Inject constructor(private val modelDao: ModelDao) {
                 downloadUrl = "https://huggingface.co/bartowski/smollm2-1.7b-instruct-v0.1-GGUF/resolve/main/smollm2-1.7b-instruct-v0.1-Q4_K_M.gguf",
                 sizeBytes = 1_000_000_000L, quantization = "Q4_K_M", contextLength = 8192,
                 minRamMb = 4096, license = "Apache 2.0",
-                description = "HuggingFace's SmolLM2 — ultra-light, works on 4 GB RAM phones.")
+                description = "HuggingFace's SmolLM2 — ultra-light, works on 4 GB RAM phones."),
+            // --- MediaPipe GenAI (.task format) — wired in v0.2 by LocalLlmProvider → MediapipeLlmEngine ---
+            // TODO: verify URLs — MediaPipe .task files are hosted by Google on storage.googleapis.com.
+            // The exact path/version is pinned by MediaPipe's official LLM Inference quickstart docs.
+            ModelEntity(id = "gemma-2b-it-mediapipe", displayName = "Gemma 2B Instruct (MediaPipe)",
+                runtime = ModelRuntime.MEDIAPIPE_GENAI,
+                huggingfaceRepo = "google/gemma-2-2b-it",
+                filename = "gemma-2b-it-gpu-int8.task",
+                downloadUrl = "https://storage.googleapis.com/mediapipe-models/text_generator/gemma/float16/1/gemma-2b-it-gpu-int8.task",
+                sizeBytes = 1_700_000_000L, quantization = "int8", contextLength = 8192,
+                minRamMb = 6144, license = "Gemma",
+                description = "Gemma 2B Instruct in MediaPipe .task format — runs via MediaPipe GenAI. Google-blessed runtime, pre-built .so per ABI, fastest path to real on-device LLM."),
+            ModelEntity(id = "gemma-1b-it-mediapipe", displayName = "Gemma 2B IT int4 (MediaPipe, low-RAM)",
+                runtime = ModelRuntime.MEDIAPIPE_GENAI,
+                huggingfaceRepo = "google/gemma-2-2b-it",
+                filename = "gemma-2b-it-gpu-int4.task",
+                downloadUrl = "https://storage.googleapis.com/mediapipe-models/text_generator/gemma/int4/1/gemma-2b-it-gpu-int4.task",
+                sizeBytes = 1_400_000_000L, quantization = "int4", contextLength = 8192,
+                minRamMb = 4096, license = "Gemma",
+                description = "Smaller (int4-quantized) MediaPipe .task build of Gemma 2B Instruct — fits low-RAM devices. Same Gemma quality, ~30% smaller footprint.")
         )
     }
 }
