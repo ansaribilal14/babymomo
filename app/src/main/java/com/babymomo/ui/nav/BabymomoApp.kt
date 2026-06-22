@@ -37,10 +37,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -59,6 +61,24 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabymomoApp() {
+    // Check if onboarding has been completed (first-launch model download)
+    val settingsRepo = dagger.hilt.android.EntryPointAccessors.fromApplication(
+        LocalContext.current.applicationContext,
+        com.babymomo.core.common.OnboardingEntryPoint::class.java
+    ).settingsRepository()
+    val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = com.babymomo.core.common.AppSettings())
+
+    if (!settings.onboardingCompleted) {
+        com.babymomo.ui.onboarding.OnboardingScreen(
+            onComplete = {
+                kotlinx.coroutines.MainScope().launch {
+                    settingsRepo.setOnboardingCompleted(true)
+                }
+            }
+        )
+        return
+    }
+
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
