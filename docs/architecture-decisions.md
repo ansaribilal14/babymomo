@@ -114,3 +114,24 @@ Periodic memory maintenance runs every 24h via WorkManager. Not a foreground ser
 
 ### User-downloadable models (not bundled)
 APK stays small (~85 MB). Users pick a model that fits their device's RAM from a curated catalog (Gemma 2B / Phi-3 mini / Qwen 2.5 1.5B / Llama 3.2 3B / SmolLM2 1.7B). All GGUF format — runtime is swappable (llama.cpp / MediaPipe / MLC) without changing the catalog.
+
+### MediaPipe GenAI as the first on-device LLM runtime (v0.2)
+
+**Decision:** For v0.2 we wire `LocalLlmProvider` to [MediaPipe GenAI](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/android) (`com.google.mediapipe:genai-text-llm-inference-android:0.10.14`), with two Gemma models added to the catalog in `.task` format (the MediaPipe-specific model container — NOT GGUF). The existing GGUF/`LLAMA_CPP` catalog entries remain untouched; they fall through the `LocalLlmProvider` dispatch table to Remote / Mock until their runtime is wired in a later PR.
+
+**Why MediaPipe GenAI won the "first runtime" slot:**
+
+1. **Google-blessed, pre-built `.so` per ABI.** MediaPipe's AAR ships arm64-v8a, armeabi-v7a, and x86_64 native libs in-tree. No NDK build, no CMakeLists, no toolchain pain on our side — drop the dependency in and Gradle does the rest. Compare to llama.cpp (we'd have to build + ship our own JNI wrapper) or MLC LLM (TVM compile step per model).
+2. **Works with Gemma out of the box.** Gemma 2B Instruct is the canonical MediaPipe LLM Inference sample model; `.task` files for int8 and int4 quantizations are Google-hosted. Gemma is also our default extraction model for the memory graph (see §2), so we get one consistent model family across reasoning + extraction.
+3. **Fastest path to real on-device inference.** Wrapping the `LlmInference` + `LlmInferenceSession` Java API in a thin Kotlin engine (`MediapipeLlmEngine`, ~150 lines) was a single-PR job. Native llama.cpp would have been a multi-week JNI/NDK project.
+4. **Streaming IS supported.** MediaPipe's `LlmInferenceSession.generateResponseAsync(partialResultListener)` delivers partial results via callback. One caveat: the callback receives the **cumulative** text (not deltas) — `MediapipeLlmEngine` converts cumulative → delta before emitting through its `Flow<String>`. This matches the rest of our `LlmProvider` ecosystem which all emit deltas.
+5. **Same dependency shape as our embedding stack.** MediaPipe is already a Google product we trust (we use ONNX Runtime for embeddings today, but MediaPipe Tasks is the parallel Google-blessed path); adopting it for LLM keeps the "official Google runtime" surface area coherent.
+
+**Limitations we accept with MediaPipe GenAI (and how we mitigate):**
+
+- **Only Gemma + a handful of other models in `.task` format.** MediaPipe GenAI does NOT consume arbitrary GGUF files — you must convert models to MediaPipe's `.task` format (a tflite-flatbuffer container with tokenizer + weights). In practice the supported set is Gemma (1.1, 2), Falcon, Phi-2, and StableLM. This is why our catalog's Phi-3 / Qwen / Llama / SmolLM2 entries stay on `LLAMA_CPP` — we can't run them via MediaPipe today. *Mitigation:* when llama.cpp JNI is wired in a later PR, those entries light up unchanged. The `ModelRuntime` enum on `ModelEntity` was designed for exactly this multi-runtime world.
+- **No `topP` / `stopSequences` / per-request `maxTokens` in session options (v0.10.14).** MediaPipe derives `topP` from `topK` internally; stop sequences are unsupported; `maxTokens` is set engine-wide (we cap at 8192 = Gemma's context length). *Mitigation:* document the gap in `MediapipeLlmEngine` kdoc; the `LlmGenerationConfig` fields are silently ignored for MediaPipe models. Not a blocker for v0.2 (none of our agents rely on stop sequences today).
+- **One session per engine at a time.** MediaPipe's `LlmInferenceSession` is not safe for concurrent use on a single `LlmInference` instance. *Mitigation:* `MediapipeLlmEngine` serializes all inference through a `Mutex`. For v0.2 this is fine (the kernel is single-user, single-conversation); if we ever pipeline agents in parallel we'll need to either pool engines or accept the serialization.
+- **`.task` URLs are Google-hosted and versioned.** Unlike HuggingFace GGUF URLs (stable per-commit), Google's `storage.googleapis.com/mediapipe-models/...` paths can change between MediaPipe releases. The catalog entries carry a `// TODO: verify URL` comment; `ModelDownloadWorker` (planned for v0.2) should validate the URL returns 200 before showing a Download button.
+
+**Where this leaves us:** with v0.2, a user who downloads `gemma-2b-it-mediapipe` or `gemma-1b-it-mediapipe` from the Models tab gets REAL on-device Gemma inference through `LocalLlmProvider` → `MediapipeLlmEngine` → MediaPipe native libs. The provider chain falls through to Remote / Mock for any other model runtime, exactly as in v0.1.

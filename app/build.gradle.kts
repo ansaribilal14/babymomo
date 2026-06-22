@@ -103,6 +103,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.coil.compose)
     implementation(libs.onnxruntime.android)
+    implementation(libs.mediapipe.genai.llm.inference)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.moshi)
