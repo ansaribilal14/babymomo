@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">BABYMOMO</string>
+    <string name="app_tagline">Your private AI companion that grows into your personal operating system</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_memory">Memory</string>
+    <string name="nav_projects">Projects</string>
+    <string name="nav_skills">Skills</string>
+    <string name="nav_models">Models</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_agents">Agents</string>
+    <string name="action_send">Send</string>
+    <string name="action_stop">Stop</string>
+    <string name="placeholder_chat_input">Ask MOMO anything…</string>
+    <string name="empty_chat_title">Hello, I\'m MOMO</string>
+    <string name="empty_chat_body">I remember what matters to you and learn as we talk. Start by telling me something about your day, a project, or a goal.</string>
+    <string name="memory_empty">No memories yet. They will accumulate as we talk.</string>
+    <string name="projects_empty">No projects yet. Tell me about one in chat, or create it here.</string>
+    <string name="skills_empty">No skills installed.</string>
+    <string name="models_empty">No models downloaded yet.</string>
+</resources>

@@ -1,0 +1,43 @@
+# Gradle / build artifacts
+.gradle/
+build/
+app/build/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Kotlin
+*.kotlin_metadata
+.kotlin/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+captures/
+.navigation/
+local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+nohup.out
+
+# Secrets — NEVER commit
+.env
+*.keystore
+*.jks
+secrets.properties
+google-services.json
+
+# Native toolchains (downloaded per machine)
+jdk17/
+android-sdk/
+
+# Generated Room schemas ARE tracked (small JSON, useful for migrations)

@@ -1,0 +1,35 @@
+package com.babymomo.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val Cream = Color(0xFFFFF8F1)
+val CreamSurface = Color(0xFFFAF1E5)
+val CardLight = Color(0xFFFFFCF7)
+val DividerLight = Color(0xFFE8DCC8)
+val TextPrimaryLight = Color(0xFF2A1F18)
+val TextSecondaryLight = Color(0xFF6B5A4C)
+val TextTertiaryLight = Color(0xFFA8967F)
+val Amber = Color(0xFFD97F3F)
+val AmberDeep = Color(0xFFB8612A)
+val AmberSoft = Color(0xFFE8B584)
+val Sage = Color(0xFF7A8C6A)
+val Rust = Color(0xFFB0492E)
+val Sky = Color(0xFF6C8DA8)
+
+val Charcoal = Color(0xFF1A1410)
+val CharcoalSurface = Color(0xFF181210)
+val CardDark = Color(0xFF241C16)
+val DividerDark = Color(0xFF332720)
+val TextPrimaryDark = Color(0xFFF2E8DD)
+val TextSecondaryDark = Color(0xFFBFAA95)
+val TextTertiaryDark = Color(0xFF8A7866)
+val AmberDark = Color(0xFFE8B584)
+val AmberDeepDark = Color(0xFFD97F3F)
+val SageDark = Color(0xFF9CAB8C)
+val RustDark = Color(0xFFD86A4A)
+val SkyDark = Color(0xFF9CB8CF)
+
+val MemoryWorking = Color(0xFFD97F3F)
+val MemoryEpisodic = Color(0xFF6C8DA8)
+val MemorySemantic = Color(0xFF7A8C6A)
+val MemoryProcedural = Color(0xFFB0492E)

@@ -1,0 +1,17 @@
+<resources>
+    <color name="warm_cream">#FFF8F1</color>
+    <color name="warm_cream_dark">#1A1410</color>
+    <color name="warm_amber">#D97F3F</color>
+    <color name="warm_amber_deep">#B8612A</color>
+    <color name="warm_text_primary_light">#2A1F18</color>
+    <color name="warm_text_primary_dark">#F2E8DD</color>
+    <color name="warm_card_light">#FFFCF7</color>
+    <color name="warm_card_dark">#241C16</color>
+    <color name="warm_surface_light">#FAF1E5</color>
+    <color name="warm_surface_dark">#181210</color>
+    <color name="warm_divider_light">#E8DCC8</color>
+    <color name="warm_divider_dark">#332720</color>
+    <color name="ic_launcher_background">#D97F3F</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>
