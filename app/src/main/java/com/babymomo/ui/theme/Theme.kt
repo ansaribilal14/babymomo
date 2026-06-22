@@ -13,19 +13,75 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val LightColors = lightColorScheme(
-    primary = Amber, onPrimary = Color.White, primaryContainer = AmberSoft, onPrimaryContainer = TextPrimaryLight,
-    secondary = Sage, onSecondary = Color.White, tertiary = Sky, onTertiary = Color.White,
-    error = Rust, onError = Color.White, background = Cream, onBackground = TextPrimaryLight,
-    surface = CreamSurface, onSurface = TextPrimaryLight, surfaceVariant = CardLight, onSurfaceVariant = TextSecondaryLight,
-    outline = DividerLight, outlineVariant = TextTertiaryLight,
+    primary = Amber,
+    onPrimary = Color.White,
+    primaryContainer = AmberSoft,
+    onPrimaryContainer = AmberOnContainer,
+    inversePrimary = AmberDeep,
+
+    secondary = Sage,
+    onSecondary = Color.White,
+    secondaryContainer = SageSoft,
+    onSecondaryContainer = Color(0xFF1F3A14),
+
+    tertiary = Sky,
+    onTertiary = Color.White,
+    tertiaryContainer = SkySoft,
+    onTertiaryContainer = Color(0xFF0C2436),
+
+    error = Rust,
+    onError = Color.White,
+    errorContainer = RustSoft,
+    onErrorContainer = Color(0xFF4A1407),
+
+    background = Cream,
+    onBackground = TextPrimaryLight,
+    surface = CreamSurface,
+    onSurface = TextPrimaryLight,
+    surfaceVariant = CreamSurfaceHigh,
+    onSurfaceVariant = TextSecondaryLight,
+    surfaceTint = Amber,
+    inverseSurface = TextPrimaryLight,
+    inverseOnSurface = Cream,
+    outline = DividerLight,
+    outlineVariant = TextTertiaryLight,
+    scrim = Color(0x99000000),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = AmberDark, onPrimary = Charcoal, primaryContainer = AmberDeepDark, onPrimaryContainer = TextPrimaryDark,
-    secondary = SageDark, onSecondary = Charcoal, tertiary = SkyDark, onTertiary = Charcoal,
-    error = RustDark, onError = Charcoal, background = Charcoal, onBackground = TextPrimaryDark,
-    surface = CharcoalSurface, onSurface = TextPrimaryDark, surfaceVariant = CardDark, onSurfaceVariant = TextSecondaryDark,
-    outline = DividerDark, outlineVariant = TextTertiaryDark,
+    primary = AmberDark,
+    onPrimary = Color(0xFF3A1E04),
+    primaryContainer = AmberSoftDark,
+    onPrimaryContainer = AmberOnContainerDark,
+    inversePrimary = Amber,
+
+    secondary = SageDark,
+    onSecondary = Color(0xFF14260A),
+    secondaryContainer = Color(0xFF3A4A2E),
+    onSecondaryContainer = Color(0xFFDDE7CB),
+
+    tertiary = SkyDark,
+    onTertiary = Color(0xFF0C2436),
+    tertiaryContainer = Color(0xFF243A4D),
+    onTertiaryContainer = Color(0xFFD2E2EF),
+
+    error = RustDark,
+    onError = Color(0xFF4A1407),
+    errorContainer = Color(0xFF5A2415),
+    onErrorContainer = Color(0xFFFAD6CC),
+
+    background = Charcoal,
+    onBackground = TextPrimaryDark,
+    surface = CharcoalSurface,
+    onSurface = TextPrimaryDark,
+    surfaceVariant = CharcoalSurfaceHigh,
+    onSurfaceVariant = TextSecondaryDark,
+    surfaceTint = AmberDark,
+    inverseSurface = Cream,
+    inverseOnSurface = TextPrimaryLight,
+    outline = DividerDark,
+    outlineVariant = TextTertiaryDark,
+    scrim = Color(0xCC000000),
 )
 
 @Composable
@@ -36,8 +92,10 @@ fun BABYMOMOTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composab
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
+            window.navigationBarColor = Color.Transparent.toArgb()
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
         }
     }
     MaterialTheme(colorScheme = colors, typography = BABYMOMOTypography, shapes = BABYMOMOShapes, content = content)

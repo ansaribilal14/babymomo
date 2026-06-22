@@ -3,12 +3,15 @@ package com.babymomo
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.babymomo.core.common.SettingsRepository
+import com.babymomo.core.llm.RemoteLlmProvider
 import com.babymomo.core.memory.MemoryMaintenance
 import com.babymomo.work.MemoryMaintenanceWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
@@ -17,6 +20,8 @@ import javax.inject.Inject
 class BabymomoApp : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var memoryMaintenance: MemoryMaintenance
+    @Inject lateinit var settingsRepo: SettingsRepository
+    @Inject lateinit var remoteProvider: RemoteLlmProvider
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -28,9 +33,16 @@ class BabymomoApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        // Ensure the model download directory exists before any worker tries to write to it.
         File(filesDir, "models").mkdirs()
         appScope.launch {
+            // Apply persisted remote LLM settings to the live provider on startup.
+            // This fixes the v0.3 bug where settings were ephemeral and lost on restart.
+            runCatching {
+                val s = settingsRepo.settings.first()
+                if (s.remoteEnabled && s.remoteApiKey.isNotBlank()) {
+                    remoteProvider.configure(s.remoteBaseUrl, s.remoteApiKey, s.remoteModel)
+                }
+            }
             runCatching { MemoryMaintenanceWorker.enqueue(this@BabymomoApp) }
             runCatching { memoryMaintenance.runStartupSweep() }
         }

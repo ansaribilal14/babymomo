@@ -1,12 +1,15 @@
 package com.babymomo.ui.projects
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -15,12 +18,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +46,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.babymomo.R
 import com.babymomo.data.db.entity.ProjectEntity
+import com.babymomo.data.db.entity.ProjectStatus
 
 @Composable
 fun ProjectsScreen(vm: ProjectsViewModel = hiltViewModel()) {
@@ -50,15 +55,26 @@ fun ProjectsScreen(vm: ProjectsViewModel = hiltViewModel()) {
         if (state.projects.isEmpty()) {
             EmptyProjectsState(onCreate = { vm.showCreateDialog(true) })
         } else {
-            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(state.projects) { p -> ProjectCard(p) }
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(state.projects, key = { it.id }) { p -> ProjectCard(p) }
             }
         }
-        FloatingActionButton(onClick = { vm.showCreateDialog(true) }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
-            Icon(Icons.Rounded.Add, contentDescription = "New project")
-        }
+        ExtendedFloatingActionButton(
+            onClick = { vm.showCreateDialog(true) },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+            icon = { Icon(Icons.Rounded.Add, contentDescription = "New project") },
+            text = { Text("New project") }
+        )
         if (state.showCreateDialog) {
-            CreateProjectDialog(onDismiss = { vm.showCreateDialog(false) }, onCreate = { name, desc, tasks -> vm.createProject(name, desc, tasks) })
+            CreateProjectDialog(
+                onDismiss = { vm.showCreateDialog(false) },
+                onCreate = { name, desc, tasks -> vm.createProject(name, desc, tasks) }
+            )
         }
     }
 }
@@ -67,8 +83,19 @@ fun ProjectsScreen(vm: ProjectsViewModel = hiltViewModel()) {
 private fun EmptyProjectsState(onCreate: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(stringResource(R.string.projects_empty), style = MaterialTheme.typography.bodyMedium)
+            Icon(
+                Icons.Rounded.Folder,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(48.dp)
+            )
             Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(R.string.projects_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
             Button(onClick = onCreate) { Text("Create your first project") }
         }
     }
@@ -76,20 +103,87 @@ private fun EmptyProjectsState(onCreate: () -> Unit) {
 
 @Composable
 private fun ProjectCard(p: ProjectEntity) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(color = try { Color(android.graphics.Color.parseColor(p.color)) } catch (_: Exception) { MaterialTheme.colorScheme.primary },
-                    shape = MaterialTheme.shapes.small, modifier = Modifier.size(12.dp)) {}
-                Spacer(Modifier.width(10.dp))
-                Text(p.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.weight(1f))
-                Text(p.status.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val fallbackPrimary = MaterialTheme.colorScheme.primary
+    val accentColor = remember(p.color, fallbackPrimary) {
+        try { Color(android.graphics.Color.parseColor(p.color)) } catch (_: Exception) { fallbackPrimary }
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            // Coloured accent bar — uses the project's own color
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxHeight()
+                    .background(accentColor)
+            )
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = accentColor.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.Folder,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            p.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (p.description.isNotBlank()) {
+                            Text(
+                                p.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    StatusChip(p.status)
+                }
             }
-            if (p.description.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(p.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(status: ProjectStatus) {
+    val (color, label) = when (status) {
+        ProjectStatus.ACTIVE -> MaterialTheme.colorScheme.primary to "Active"
+        ProjectStatus.ON_HOLD -> MaterialTheme.colorScheme.tertiary to "On hold"
+        ProjectStatus.COMPLETED -> MaterialTheme.colorScheme.secondary to "Completed"
+        ProjectStatus.ARCHIVED -> MaterialTheme.colorScheme.onSurfaceVariant to "Archived"
+    }
+    Surface(
+        color = color.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(50),
+        modifier = Modifier.height(24.dp)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }
@@ -100,21 +194,35 @@ private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String
     var desc by remember { mutableStateOf("") }
     var tasksText by remember { mutableStateOf("") }
     AlertDialog(
-        onDismissRequest = onDismiss, title = { Text("New project") },
+        onDismissRequest = onDismiss,
+        title = { Text("New project", style = MaterialTheme.typography.headlineSmall) },
         text = {
-            Column {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = tasksText, onValueChange = { tasksText = it }, label = { Text("Tasks (one per line)") }, modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Name") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = desc, onValueChange = { desc = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = tasksText, onValueChange = { tasksText = it },
+                    label = { Text("Tasks (one per line)") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp)
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val tasks = tasksText.lines().map { it.trim() }.filter { it.isNotBlank() }
-                onCreate(name.trim(), desc.trim(), tasks)
-            }, enabled = name.isNotBlank()) { Text("Create") }
+            TextButton(
+                onClick = {
+                    val tasks = tasksText.lines().map { it.trim() }.filter { it.isNotBlank() }
+                    onCreate(name.trim(), desc.trim(), tasks)
+                },
+                enabled = name.isNotBlank()
+            ) { Text("Create") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
