@@ -46,10 +46,10 @@ class ModelDownloadWorker @AssistedInject constructor(
     private val httpClient: OkHttpClient
 ) : CoroutineWorker(appContext, params) {
 
-    private val modelId: String? = params.input.getString(KEY_MODEL_ID)
+    private val modelId: String? = params.inputData.getString(KEY_MODEL_ID)
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val modelId = this.modelId
+        val modelId = this@ModelDownloadWorker.modelId
         if (modelId.isNullOrBlank()) {
             return@withContext Result.failure(workDataOf(KEY_ERROR to "Missing modelId"))
         }

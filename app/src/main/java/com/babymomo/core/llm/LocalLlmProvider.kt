@@ -13,17 +13,21 @@ import javax.inject.Singleton
 /**
  * LocalLlmProvider — on-device LLM inference.
  *
- * Dispatch table (keyed off the active model's [ModelRuntime]):
- *  - [ModelRuntime.MEDIAPIPE_GENAI] → [MediapipeLlmEngine] (real on-device Gemma inference via
- *    MediaPipe GenAI). Wired in v0.2.
- *  - [ModelRuntime.LLAMA_CPP] → NOT wired yet (returns the "v0.2 wires this" stub error).
- *    Tracked separately — MediaPipe GenAI was chosen as the first runtime because it ships
- *    pre-built .so per ABI and supports Gemma out of the box.
+ * ### v0.2 status: ALL local runtimes are stubbed.
+ * The intended dispatch table (keyed off the active model's [ModelRuntime]):
+ *  - [ModelRuntime.MEDIAPIPE_GENAI] → [MediapipeLlmEngine]. STUBBED in v0.2: the MediaPipe
+ *    `tasks-genai` 0.10.14 artifact does NOT ship the session API this engine was written
+ *    against (no `LlmInferenceSession`, no `addQueryChunk`, no streaming partial-result
+ *    callback). `MediapipeLlmEngine` throws `IllegalStateException` from every method.
+ *    v0.3 will either upgrade MediaPipe or rewrite the engine against the actual 0.10.14
+ *    `LlmInference.generateResponse` surface.
+ *  - [ModelRuntime.LLAMA_CPP] → NOT wired yet (llama.cpp JNI bridge pending).
  *  - Other runtimes (MLC_LLM, ONNX_RUNTIME) → NOT wired yet.
  *
- * The LlmProviderChain only calls [complete] / [streamComplete] when [isAvailable] is true, so
- * non-MediaPipe runtimes effectively fall through to Remote / Mock. The stub error paths below
- * exist so that anyone calling [complete] directly (bypassing the chain) gets a clear message.
+ * [isAvailable] returns `false` for every runtime in v0.2, so [LlmProviderChain] skips Local
+ * entirely and falls through to Remote → Mock. The stub error paths in [complete] /
+ * [streamComplete] exist so that anyone calling Local directly (bypassing the chain) gets a
+ * clear message instead of a confusing MediaPipe internal error.
  */
 @Singleton
 class LocalLlmProvider @Inject constructor(
@@ -33,10 +37,11 @@ class LocalLlmProvider @Inject constructor(
     override val name: String = "local"
 
     override suspend fun isAvailable(): Boolean {
-        val model = modelManager.activeModelFlow().first() ?: return false
-        return model.status == ModelStatus.READY &&
-            !model.localPath.isNullOrBlank() &&
-            model.runtime == ModelRuntime.MEDIAPIPE_GENAI
+        // v0.2: MediaPipe GenAI is stubbed (tasks-genai 0.10.14 API mismatch — see
+        // MediapipeLlmEngine KDoc + CHANGELOG [0.2.0] ### Known Issues). All other local
+        // runtimes (llama.cpp / MLC / ONNX) are also unwired. So Local is NEVER available
+        // in v0.2 — LlmProviderChain falls through to Remote → Mock.
+        return false
     }
 
     override suspend fun status(): String {
@@ -44,12 +49,9 @@ class LocalLlmProvider @Inject constructor(
         val pathTail = m.localPath?.substringAfterLast('/') ?: "(not downloaded)"
         return when (m.runtime) {
             ModelRuntime.MEDIAPIPE_GENAI ->
-                if (m.status == ModelStatus.READY && !m.localPath.isNullOrBlank())
-                    "Local [MediaPipe GenAI]: ${m.displayName} ($pathTail)"
-                else
-                    "Local [MediaPipe GenAI]: ${m.displayName} — not downloaded yet"
+                "Local [MediaPipe GenAI — stubbed in v0.2, pending v0.3]: ${m.displayName} ($pathTail)"
             ModelRuntime.LLAMA_CPP ->
-                "Local [llama.cpp — pending v0.2]: ${m.displayName} ($pathTail)"
+                "Local [llama.cpp — pending v0.3]: ${m.displayName} ($pathTail)"
             ModelRuntime.MLC_LLM ->
                 "Local [MLC LLM — pending]: ${m.displayName} ($pathTail)"
             ModelRuntime.ONNX_RUNTIME ->
@@ -67,8 +69,11 @@ class LocalLlmProvider @Inject constructor(
 
         return when (model.runtime) {
             ModelRuntime.MEDIAPIPE_GENAI -> {
+                // v0.2 stub: MediapipeLlmEngine.configure throws IllegalStateException because
+                // the tasks-genai 0.10.14 API doesn't match the engine's session-based design.
+                // runCatching surfaces it as a Result.failure so the chain falls through cleanly.
                 runCatching {
-                    mediapipe.configure(path) // idempotent — reloads only if path changed
+                    mediapipe.configure(path) // throws (stub) — see MediapipeLlmEngine KDoc
                     val prompt = formatGemmaPrompt(messages)
                     val t0 = System.currentTimeMillis()
                     val content = mediapipe.complete(prompt, config)
@@ -84,8 +89,10 @@ class LocalLlmProvider @Inject constructor(
             }
             // LLAMA_CPP / MLC_LLM / ONNX_RUNTIME are wired in a later PR — surface a clear stub.
             else -> Result.failure(IllegalStateException(
-                "Local inference runtime '${model.runtime}' is not wired yet (v0.2 wires MediaPipe GenAI). " +
-                    "Model at $path is downloaded but its runtime bridge is pending."
+                "Local inference runtime '${model.runtime}' is not wired in v0.2. " +
+                    "MediaPipe GenAI is stubbed (tasks-genai 0.10.14 API mismatch — see v0.3); " +
+                    "other runtimes (llama.cpp / MLC / ONNX) are pending. " +
+                    "Model at $path is downloaded but its runtime bridge is unavailable."
             ))
         }
     }
@@ -104,16 +111,15 @@ class LocalLlmProvider @Inject constructor(
 
         when (model.runtime) {
             ModelRuntime.MEDIAPIPE_GENAI -> {
-                // Engine is configured eagerly (must happen on a suspend context) before we
-                // delegate streaming. The streaming Flow itself is cold and dispatched to the
-                // engine's channelFlow.
+                // v0.2 stub: MediapipeLlmEngine.configure throws IllegalStateException (stub).
+                // Surface the stub message and return — the chain will fall through to Remote/Mock.
                 runCatching { mediapipe.configure(path) }
-                    .onFailure { emit("[MediaPipe load failed: ${it.message}]"); return@flow }
+                    .onFailure { emit("[MediaPipe GenAI stubbed in v0.2 — ${it.message}]"); return@flow }
                 val prompt = formatGemmaPrompt(messages)
                 mediapipe.streamComplete(prompt, config).collect { emit(it) }
             }
             else -> {
-                emit("[Local inference runtime '${model.runtime}' is wired in a later PR — v0.2 ships MediaPipe GenAI. Your model is downloaded and ready.]")
+                emit("[Local inference runtime '${model.runtime}' is not wired in v0.2 — MediaPipe GenAI is stubbed (tasks-genai 0.10.14 API mismatch, pending v0.3); other runtimes pending. Your model is downloaded but Local inference is unavailable; falling back to Remote/Mock.]")
             }
         }
     }
