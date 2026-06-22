@@ -182,48 +182,6 @@ fun SettingsScreen(vm: SettingsViewModel = hiltViewModel()) {
             }
         }
 
-        // HuggingFace token — for downloading gated models (Gemma, Llama, etc.)
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("Model Downloads", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Some models (Gemma, Llama) require accepting their license on HuggingFace. " +
-                    "Paste a free HuggingFace token here to download them. " +
-                    "Get one at huggingface.co/settings/tokens (Read access is enough).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = settings.hfToken,
-                    onValueChange = { vm.setHfToken(it) },
-                    label = { Text("HuggingFace Token") },
-                    placeholder = { Text("hf_...") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                )
-                if (settings.hfToken.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "✓ Token saved — gated models (Gemma, Llama) will download successfully",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-
         // Privacy
         SectionCard(title = "Privacy", icon = Icons.Rounded.Lock) {
             SettingRow(

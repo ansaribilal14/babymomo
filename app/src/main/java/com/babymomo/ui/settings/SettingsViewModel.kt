@@ -55,8 +55,4 @@ class SettingsViewModel @Inject constructor(
     fun setCriticEnabled(enabled: Boolean) {
         viewModelScope.launch { repo.setCriticEnabled(enabled) }
     }
-
-    fun setHfToken(token: String) {
-        viewModelScope.launch { repo.setHfToken(token) }
-    }
 }

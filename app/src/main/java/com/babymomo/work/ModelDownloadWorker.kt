@@ -21,7 +21,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -44,8 +43,7 @@ class ModelDownloadWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val modelManager: ModelManager,
     private val modelDao: ModelDao,
-    private val httpClient: OkHttpClient,
-    private val settingsRepo: com.babymomo.core.common.SettingsRepository
+    private val httpClient: OkHttpClient
 ) : CoroutineWorker(appContext, params) {
 
     private val modelId: String? = params.inputData.getString(KEY_MODEL_ID)
@@ -72,16 +70,7 @@ class ModelDownloadWorker @AssistedInject constructor(
         val expectedMd5 = model.md5.takeIf { it.isNotBlank() }
 
         try {
-            val requestBuilder = Request.Builder().url(model.downloadUrl)
-            // Attach HuggingFace token if the URL is on huggingface.co and a token is set.
-            // Required for gated models (Gemma, Llama, etc.). Read-type tokens suffice.
-            if (model.downloadUrl.contains("huggingface.co")) {
-                val hfToken = settingsRepo.settings.first().hfToken
-                if (hfToken.isNotBlank()) {
-                    requestBuilder.header("Authorization", "Bearer $hfToken")
-                }
-            }
-            val request = requestBuilder.build()
+            val request = Request.Builder().url(model.downloadUrl).build()
 
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {

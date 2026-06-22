@@ -36,7 +36,6 @@ class SettingsRepository @Inject constructor(
         val REMOTE_BASE_URL = stringPreferencesKey("remote_base_url")
         val REMOTE_API_KEY = stringPreferencesKey("remote_api_key")
         val REMOTE_MODEL = stringPreferencesKey("remote_model")
-        val HF_TOKEN = stringPreferencesKey("hf_token")
         val INTERNET_ENABLED = booleanPreferencesKey("internet_enabled")
         val EXTRACTION_ENABLED = booleanPreferencesKey("extraction_enabled")
         val CRITIC_ENABLED = booleanPreferencesKey("critic_enabled")
@@ -51,15 +50,10 @@ class SettingsRepository @Inject constructor(
             remoteBaseUrl = prefs[REMOTE_BASE_URL] ?: DEFAULT_BASE_URL,
             remoteApiKey = prefs[REMOTE_API_KEY] ?: "",
             remoteModel = prefs[REMOTE_MODEL] ?: DEFAULT_MODEL,
-            hfToken = prefs[HF_TOKEN] ?: "",
             internetEnabled = prefs[INTERNET_ENABLED] ?: false,
             extractionEnabled = prefs[EXTRACTION_ENABLED] ?: true,
             criticEnabled = prefs[CRITIC_ENABLED] ?: true
         )
-    }
-
-    suspend fun setHfToken(token: String) {
-        ctx.dataStore.edit { it[HF_TOKEN] = token }
     }
 
     suspend fun updateRemoteConfig(enabled: Boolean, baseUrl: String, apiKey: String, model: String) {
@@ -89,7 +83,6 @@ data class AppSettings(
     val remoteBaseUrl: String = SettingsRepository.DEFAULT_BASE_URL,
     val remoteApiKey: String = "",
     val remoteModel: String = SettingsRepository.DEFAULT_MODEL,
-    val hfToken: String = "",
     val internetEnabled: Boolean = false,
     val extractionEnabled: Boolean = true,
     val criticEnabled: Boolean = true
