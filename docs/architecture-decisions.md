@@ -114,3 +114,76 @@ Periodic memory maintenance runs every 24h via WorkManager. Not a foreground ser
 
 ### User-downloadable models (not bundled)
 APK stays small (~85 MB). Users pick a model that fits their device's RAM from a curated catalog (Gemma 2B / Phi-3 mini / Qwen 2.5 1.5B / Llama 3.2 3B / SmolLM2 1.7B). All GGUF format — runtime is swappable (llama.cpp / MediaPipe / MLC) without changing the catalog.
+
+---
+
+## 4. Testing strategy
+
+**Decision:** BABYMOMO ships with a foundational layer of JUnit 4 unit tests for the
+deterministic, framework-independent core (memory graph, vector index, request classifier,
+rerank scoring). The full DI / Room / Compose stack is exercised by instrumented tests
+planned for v0.3.
+
+### Why JUnit 4 + hand-written in-memory DAOs (not MockK)
+
+1. **Tests real behavior.** Room DAOs are interfaces with `@Query` annotations. Mocking
+   them with MockK verifies "the mock was called with these args" — not that production
+   code works against real SQL semantics. A hand-written in-memory DAO (a `mutableListOf`
+   + a few filter predicates, ~30 lines) faithfully mirrors the SQL (LIKE substring
+   matching, `validUntil IS NULL` filtering, etc.) and tests the *real* `MemoryGraph`
+   / `MemoryService` logic.
+2. **Zero new dependencies.** MockK adds ~1 MB of bytecode and a learning curve. For an
+   app where the testing surface is mostly "does this weighted sum / SQL-like filter do
+   the right thing?", hand-written stubs are smaller, faster, and clearer.
+3. **Reads like a spec.** Tests with backtick-quoted names (`fun `resolveOrCreate deduplicates by canonical name`()`)
+   and self-contained in-memory DAOs read as executable documentation. A new contributor
+   can understand `MemoryGraph`'s contract by reading the test file top-to-bottom.
+
+See [`MemoryGraphTest.kt`](../app/src/test/java/com/babymomo/core/memory/MemoryGraphTest.kt)
+for the canonical example: `InMemoryEntityDao`, `InMemoryRelationDao`, `InMemoryLinkDao`
+are hand-written, ~30 lines each, and exercise entity resolution, bi-temporal invalidation,
+and 1-/2-hop expansion without any mocking framework.
+
+### Test the math, not the framework
+
+Pure formulas (cosine similarity, rerank scoring, complexity escalation) are extracted into
+small `internal` functions and tested directly. Spinning up the full DI graph (embedder +
+vector index + graph + memory service) just to verify a weighted sum is overkill.
+
+- **`MemoryRecaller.computeRerankScore(...)`** — extracted as an `internal` companion
+  function so the 4-signal formula (0.5·cos + 0.2·graph + 0.2·conf + 0.1·recency) can be
+  verified in isolation. See
+  [`MemoryRecallerRerankTest.kt`](../app/src/test/java/com/babymomo/core/memory/MemoryRecallerRerankTest.kt).
+- **`FlatVectorIndex.cosineSimilarity` / `bytesToFloats`** — kept private; exercised via
+  the public `search()` / `rebuild()` API with constructed embeddings. No public-API
+  widening required. See
+  [`FlatVectorIndexCosineTest.kt`](../app/src/test/java/com/babymomo/core/memory/FlatVectorIndexCosineTest.kt).
+- **`RequestClassifier.classify`** — pure function, no DI, tested exhaustively in
+  [`RequestClassifierTest.kt`](../app/src/test/java/com/babymomo/core/kernel/RequestClassifierTest.kt).
+
+### What's tested today (v0.1.x)
+
+| Component | What | How |
+|---|---|---|
+| `MemoryGraph` | Entity resolution (canonicalization, alias merge), relation dedup, bi-temporal invalidation, 1-/2-hop neighbor expansion | Hand-written in-memory DAOs + `runTest` |
+| `FlatVectorIndex` | Cosine similarity (identical/orthogonal/opposite/empty/different-length), byte-to-float decoding round-trip (384-dim → 1536 bytes → 384-dim lossless), sorted-descending search, dedup-by-id, remove | Public `search()` / `rebuild()` API |
+| `RequestClassifier` | Keyword-triggered routing (planning, research, critic, tools, internet), length-based complexity escalation, `needMemory` invariant | Pure function, no DI |
+| `MemoryRecaller` reranker | 4-signal scoring formula, individual signal weight checks, recency-decay curve at 0/30/60 days | Extracted `internal` companion function |
+
+### Planned for v0.3
+
+- **Integration tests (Room with in-memory DB).** `androidx.room:room-testing` provides
+  `Room.inMemoryDatabaseBuilder(...)` which runs the actual SQLite + Room stack against a
+  throwaway DB. These will cover the real SQL semantics (FTS, LIKE, indices, migrations)
+  that the hand-written in-memory DAOs approximate. They run on the JVM via Robolectric
+  (no device required) or as instrumented tests.
+- **Compose UI tests.** `createAndroidComposeRule<MainActivity>()` for the 7 main screens —
+  verify navigation flows, memory list filtering, chat streaming UI states. These require
+  an emulator / device.
+- **CI runs `./gradlew test` on every push.** Currently CI only runs `./gradlew
+  assembleDebug` (build green = ship). Adding the test step is a one-line workflow change
+  once the test count justifies the CI minutes — v0.3 is the target.
+- **Agent + Skill tests with a stubbed LLM.** `MockLlmProvider` returns deterministic
+  responses, making it possible to unit-test `PlannerAgent.run()` / `WriteArticleSkill.execute()`
+  end-to-end without a real LLM.
+

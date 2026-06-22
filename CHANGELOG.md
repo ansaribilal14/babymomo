@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Unit tests for `MemoryGraph` (entity resolution, bi-temporal relations, graph expansion), `RequestClassifier` (routing heuristics), `FlatVectorIndex` (cosine similarity math), `MemoryRecaller` (4-signal rerank scoring).
+- `CONTRIBUTING.md` with setup, branch strategy, commit conventions, PR process, and extension points (Skills, Agents, LLM providers).
+
 ### Planned for v0.2
 - Wire `MediaPipe GenAI` or `llama.cpp` JNI bridge into `LocalLlmProvider` so downloaded models actually run on-device.
 - Bundle `bge-small-en-v1.5` int8 ONNX (~33 MB) as an asset and wire `OnnxEmbedder`.
