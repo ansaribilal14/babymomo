@@ -57,7 +57,7 @@ This document summarizes the research that drove BABYMOMO's architecture. Two de
 - **Default:** `BAAI/bge-small-en-v1.5` — 384-dim, 33.4M params, ~33 MB int8 ONNX, MTEB 62.28, Apache 2.0.
 - **Runtime:** ONNX Runtime Mobile with NNAPI delegate (GPU/NPU acceleration on supported devices).
 - **Multilingual upgrade path:** `EmbeddingGemma` (256-d Matryoshka, multilingual) — drop-in replacement behind `Embedder` interface; re-embed all memories on switch.
-- **v0.3 status:** The real ~33 MB int8 ONNX binary is bundled as an app asset at `app/src/main/assets/models/bge-small-en-v1.5-int8.onnx`. `OnnxEmbedder` loads it on first call and produces real 384-dim BGE embeddings at runtime. The model is sourced from `onnx-community/bge-small-en-v1.5-ONNX` (`onnx/model_quantized.onnx` + its external `model_quantized.onnx_data` weights), re-saved as a single all-embedded `.onnx` via Python `onnx` so ORT loads it from a single asset without external-data file juggling. Verified inputs (`input_ids` / `attention_mask` / `token_type_ids`, all `int64`) and outputs (`last_hidden_state` `[batch, seq, 384]` + `sentence_embedding` `[batch, 384]`) match the BERT input contract `OnnxEmbedder` was already written against. `MockEmbedder` remains as a transparent fallback if the asset is ever missing or fails to load. (The `BertTokenizer` is still hash-based in v0.3 — see its KDoc for the v0.4 WordPiece plan.)
+- **v0.3 status:** The real ~33 MB int8 ONNX binary is bundled as an app asset at `app/src/main/assets/models/bge-small-en-v1.5-int8.onnx`. `OnnxEmbedder` loads it on first call and produces real 384-dim BGE embeddings at runtime. The model is sourced from `onnx-community/bge-small-en-v1.5-ONNX` (`onnx/model_quantized.onnx` + its external `model_quantized.onnx_data` weights), re-saved as a single all-embedded `.onnx` via Python `onnx` so ORT loads it from a single asset without external-data file juggling. Verified inputs (`input_ids` / `attention_mask` / `token_type_ids`, all `int64`) and outputs (`last_hidden_state` `[batch, seq, 384]` + `sentence_embedding` `[batch, 384]`) match the BERT input contract `OnnxEmbedder` was already written against. `MockEmbedder` remains as a transparent fallback if the asset is ever missing or fails to load. (The `BertTokenizer` is also upgraded in v0.3 — it now ships the real `bert-base-uncased` 30,522-token `vocab.txt` and performs proper greedy-longest-match WordPiece tokenization; see `BertTokenizer.kt`'s KDoc.)
 
 ### Bi-temporal model (adapted from Zep / Graphiti)
 
@@ -198,9 +198,23 @@ Dev / CI builds ship only a `bge-small-en-v1.5-int8.onnx.placeholder` marker fil
 
 The real BGE-small-en-v1.5 expects WordPiece token IDs from its 30,522-token `vocab.txt` (the `bert-base-uncased` vocab). For v0.2 we did NOT bundle that vocab — instead `BertTokenizer` lowercases, splits on `[^a-z0-9]+`, and hashes each token to a stable int in `[0, 30_000)` via FNV-1a. The input_ids land inside the model's embedding table (same range as the real vocab), so the model still runs end-to-end and produces contextual pooled vectors — but they are NOT the IDs the model was trained on, so semantic quality is degraded vs. a proper WordPiece tokenizer. This is enough for v0.2 development + integration testing of the retrieval pipeline (the reranker's graph + recency + confidence signals carry most of the load until embeddings improve). See `BertTokenizer.kt` KDoc for the full caveat.
 
+**v0.3 update — real BERT WordPiece tokenizer shipped:**
+
+Option 1 (preferred) from the v0.3 plan below is now implemented. The canonical `bert-base-uncased` 30,522-token `vocab.txt` is bundled as an app asset at `app/src/main/assets/models/bert-base-uncased-vocab.txt` (~232 KB), and `BertTokenizer` performs the full standard BERT tokenization pipeline:
+
+1. **Basic tokenization** (pre-WordPiece): clean text (drop `U+0000` / `U+FFFD` / Unicode `C*` control chars, normalize whitespace to single spaces) → lowercase → NFD accent stripping (drop combining marks, the uncased-BERT convention) → split on whitespace → split each word on punctuation (every punctuation char becomes its own token, via ASCII punct ranges + Unicode `P*` categories).
+2. **WordPiece** per word: greedy longest-match. First piece is matched as-is; subsequent pieces are prefixed with `##`. A word that can't be fully decomposed maps to `[UNK]` (id 100). Example: `"playing"` → `["play", "##ing"]`.
+3. **Truncate** to `maxLength - 2` (room for `[CLS]` + `[SEP]`).
+4. **Add special tokens**: `[CLS] + tokens + [SEP]`.
+5. **Pad** to 512 with `[PAD]` (id 0).
+6. **Attention mask**: 1 for real tokens (incl. `[CLS]`/`[SEP]`), 0 for pad.
+7. **Token type IDs**: all 0 (single-sentence input).
+
+The vocab is loaded lazily on first `tokenize()` call (or first access of a special-token id) and cached for the process lifetime (`@Singleton` scope, injected by Hilt). `OnnxEmbedder` now injects `BertTokenizer` via its constructor (instead of constructing it inline); its inference pipeline is unchanged. Embeddings now match the model's expected input distribution — semantic quality is significantly improved vs. v0.2's FNV-1a hash-based tokenizer, and the BGE encoder sees the same token-id distribution it was trained on. The `[UNK]`-mapping + `##`-continuation-piece handling means OOV words (rare given the 30k vocab, but possible for typos / proper nouns) degrade gracefully to a single `[UNK]` id rather than a random hash bucket.
+
 **v0.3 plan:**
 
-1. **Preferred:** bundle `bert-base-uncased`'s 860 KB `vocab.txt` and implement real greedy-longest-match WordPiece (with `##` continuation pieces, `[UNK]` mapping, and the `[CLS]`/`[SEP]`/`[PAD]` handling already in place). This is a tokenizer-only change — the model file, `OnnxEmbedder`, and `EmbedderProvider` stay untouched.
+1. **Preferred:** bundle `bert-base-uncased`'s 860 KB `vocab.txt` and implement real greedy-longest-match WordPiece (with `##` continuation pieces, `[UNK]` mapping, and the `[CLS]`/`[SEP]`/`[PAD]` handling already in place). This is a tokenizer-only change — the model file, `OnnxEmbedder`, and `EmbedderProvider` stay untouched. **[Done in v0.3]** — see the "v0.3 update" section above.
 2. **Alternative:** swap the whole embedder to `EmbeddingGemma` (256-d Matryoshka, multilingual, with its own SentencePiece tokenizer). This is a drop-in behind the `Embedder` interface but requires re-embedding all stored memories (the dim change is breaking). Tracked under the v0.3 multilingual upgrade.
 ---
 

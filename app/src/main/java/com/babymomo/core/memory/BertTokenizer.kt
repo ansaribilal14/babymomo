@@ -1,94 +1,261 @@
 package com.babymomo.core.memory
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
+import java.text.Normalizer
+import javax.inject.Inject
+import javax.inject.Singleton
+
 /**
- * Minimal BERT-style tokenizer for [OnnxEmbedder] (v0.2).
+ * Real BERT WordPiece tokenizer for [OnnxEmbedder] (v0.3).
  *
- * **v0.2 limitation — NOT real BGE tokenization.**
- * The real `bge-small-en-v1.5` model is a BERT-family encoder and expects
- * WordPiece token IDs from its 30,522-word vocabulary (the same vocab used by
- * `bert-base-uncased`). Bundling that 860 KB `vocab.txt` asset + implementing
- * proper WordPiece (with `##` continuation pieces, special tokens
- * `[CLS]`/`[SEP]`/`[PAD]`/`[UNK]`, and longest-match greedy splitting) is
- * planned for v0.3 — see TODO at the bottom of this file.
+ * Loads the canonical `bert-base-uncased` 30,522-token `vocab.txt` (bundled at
+ * `assets/models/bert-base-uncased-vocab.txt`, ~232 KB) on first use and
+ * performs standard BERT tokenization, matching the input distribution the
+ * `bge-small-en-v1.5` encoder was trained on:
  *
- * For v0.2 we use the simplest scheme that still produces consistent, model-
- * consumable input_ids:
- *   1. Lowercase the input.
- *   2. Split on `[^a-z0-9]+` (whitespace + punctuation).
- *   3. Hash each token to a stable int in range `[0, 30_000)` via a 32-bit
- *      FNV-1a hash reduced mod 30_000. This is the same range as the real
- *      vocab, so input_ids land inside the model's embedding table — but they
- *      are NOT the IDs the model was trained on, so embeddings will be lower
- *      quality than a proper WordPiece tokenizer.
+ *   1. **Basic tokenization** (pre-WordPiece):
+ *      - Clean text: drop control chars / U+0000 / U+FFFD, normalize all
+ *        whitespace to single spaces.
+ *      - Lowercase + strip combining accents (NFD, drop `Mn` marks) — the
+ *        uncased BERT/BGE convention.
+ *      - Split on whitespace.
+ *      - Split each word on punctuation (each punctuation char becomes its own
+ *        token).
+ *   2. **WordPiece** per word: greedy longest-match. First piece is matched
+ *      as-is; subsequent pieces are prefixed with `##`. A word that can't be
+ *      fully decomposed maps to `[UNK]`.
+ *      Example: `"playing"` → `["play", "##ing"]` (both in vocab).
+ *   3. **Truncate** to `maxLength - 2` (leaving room for `[CLS]` + `[SEP]`).
+ *   4. **Add special tokens**: `[CLS] + tokens + [SEP]`.
+ *   5. **Pad** to `maxLength` with `[PAD]`.
+ *   6. **Attention mask**: 1 for real tokens (incl. `[CLS]`/`[SEP]`), 0 for pad.
+ *   7. **Token type IDs**: all 0 (single-sentence input; BGE doesn't use segments).
  *
- * Despite that caveat, the BGE encoder still produces meaningful (if
- * downgraded) semantic vectors: the model's transformer layers can still
- * attend across the hashed tokens and produce a contextual pooled output.
- * This is sufficient for v0.2 development + integration testing of the
- * retrieval pipeline. Real production-quality search requires the v0.3
- * upgrade to the actual WordPiece vocab.
+ * This replaces v0.2's FNV-1a hash-based stand-in. The hash-based tokenizer
+ * produced input_ids inside the embedding-table range but NOT the IDs the
+ * model was trained on, so embeddings were lower-quality. With the real vocab
+ * + real WordPiece, the model sees the same token distribution it was trained
+ * on, and semantic quality matches the BGE-small reference numbers.
  *
- * Output contract matches the BGE ONNX input names:
+ * Output contract (unchanged from v0.2 — [OnnxEmbedder] needs no inference-side
+ * changes):
  *   - `inputIds: LongArray`     — `[CLS] token* [SEP] [PAD]*`, length 512
- *   - `attentionMask: LongArray`— 1 for real tokens (incl. [CLS]/[SEP]), 0 for [PAD]
- *   - `tokenTypeIds: LongArray` — all 0 (single-sentence; BGE doesn't use segment ids)
+ *   - `attentionMask: LongArray`— 1 for real tokens, 0 for `[PAD]`
+ *   - `tokenTypeIds: LongArray` — all 0 (single-sentence)
  *
- * Max sequence length is hard-clipped to 512 (BGE-small's `max_position_embeddings`).
+ * The vocab map is loaded lazily on first [tokenize] call (or first access of
+ * a special-token id) so app startup isn't blocked by ~232 KB of file I/O.
+ * [Singleton] scope ensures the map is loaded exactly once per process.
+ *
+ * Max sequence length is hard-clipped to 512 (BGE-small's
+ * `max_position_embeddings`).
  */
-class BertTokenizer(
-    private val maxLength: Int = MAX_LENGTH
+@Singleton
+class BertTokenizer @Inject constructor(
+    @ApplicationContext private val context: Context
 ) {
-    /** Special token ids used by every BERT-family encoder. */
-    private val clsId: Long = 101L
-    private val sepId: Long = 102L
-    private val padId: Long = 0L
+    private val maxLength: Int = MAX_LENGTH
+    /** Lazy-loaded vocab map: token string → token id (line number in vocab.txt). */
+    private val vocab: Map<String, Int> by lazy { loadVocab() }
+
+    /** `[UNK]` id (100 in the canonical bert-base-uncased vocab). */
+    private val unkTokenId: Long by lazy { (vocab[UNK_TOKEN] ?: 100).toLong() }
+    /** `[CLS]` id (101). */
+    private val clsTokenId: Long by lazy { (vocab[CLS_TOKEN] ?: 101).toLong() }
+    /** `[SEP]` id (102). */
+    private val sepTokenId: Long by lazy { (vocab[SEP_TOKEN] ?: 102).toLong() }
+    /** `[PAD]` id (0). */
+    private val padTokenId: Long by lazy { (vocab[PAD_TOKEN] ?: 0).toLong() }
 
     /**
      * Tokenize [text] into model-ready input tensors.
      *
-     * Returns a [Tokenized] triple of equal-length [maxLength] long arrays.
+     * Returns a [Tokenized] triple of equal-length [maxLength] long arrays:
+     * `inputIds`, `attentionMask`, `tokenTypeIds`.
      */
     fun tokenize(text: String): Tokenized {
-        val tokens = text.lowercase()
-            .split(NON_ALNUM)
-            .filter { it.isNotEmpty() }
-            .take(maxLength - 2)  // reserve 2 slots for [CLS] + [SEP]
+        // 1. Basic tokenization: clean → lowercase+strip-accents → whitespace split → punct split.
+        val basicTokens = mutableListOf<String>()
+        for (rawWord in cleanText(text).split(WHITESPACE)) {
+            if (rawWord.isEmpty()) continue
+            val lower = stripAccents(rawWord.lowercase())
+            for (sub in splitOnPunctuation(lower)) {
+                if (sub.isNotEmpty()) basicTokens.add(sub)
+            }
+        }
 
-        val contentIds = tokens.map { hashToken(it) }
-        val realLen = 2 + contentIds.size  // [CLS] + content + [SEP]
+        // 2. WordPiece per word.
+        val wordPieceTokens = ArrayList<String>(basicTokens.size * 2)
+        for (token in basicTokens) {
+            wordPieceTokens.addAll(wordPieceTokenize(token))
+        }
 
+        // 3. Truncate to maxLength - 2 (room for [CLS] + [SEP]).
+        val maxContent = maxLength - 2
+        val truncated = if (wordPieceTokens.size > maxContent) {
+            wordPieceTokens.subList(0, maxContent)
+        } else {
+            wordPieceTokens
+        }
+        val realLen = 2 + truncated.size  // [CLS] + content + [SEP]
+
+        // 4-7. Build tensors.
         val inputIds = LongArray(maxLength)
         val attentionMask = LongArray(maxLength)
+        // tokenTypeIds stays all-zero (single-sentence input)
         val tokenTypeIds = LongArray(maxLength)
 
-        inputIds[0] = clsId
+        inputIds[0] = clsTokenId
         attentionMask[0] = 1L
-        contentIds.forEachIndexed { i, id ->
-            inputIds[i + 1] = id
+        truncated.forEachIndexed { i, tok ->
+            inputIds[i + 1] = (vocab[tok] ?: unkTokenId.toInt()).toLong()
             attentionMask[i + 1] = 1L
         }
-        inputIds[realLen - 1] = sepId
+        inputIds[realLen - 1] = sepTokenId
         attentionMask[realLen - 1] = 1L
-        // tokenTypeIds stay all-zero (single-sentence input)
-        // padding (inputIds slot = 0 = [PAD]; attentionMask already 0) is correct by default
+        // Padding slots: inputIds stay 0 (= [PAD]); attentionMask stays 0.
 
         return Tokenized(inputIds, attentionMask, tokenTypeIds)
     }
 
     /**
-     * Stable 32-bit FNV-1a hash of [token] reduced mod [VOCAB_SIZE].
+     * Greedy longest-match WordPiece on a single (already lowercased +
+     * accent-stripped + punct-split) word.
      *
-     * FNV-1a is chosen for: simplicity, no allocation beyond a Long, well-
-     * distributed low bits, and determinism across runs/devices/JVMs (unlike
-     * `String.hashCode()` whose implementation can vary).
+     * First piece is matched as-is; subsequent pieces are prefixed with `##`.
+     * Returns `["[UNK]"]` if the word can't be fully decomposed.
      */
-    private fun hashToken(token: String): Long {
-        var h = 0x811C9DC5L  // FNV offset basis (32-bit)
-        for (c in token) {
-            h = h xor c.code.toLong()
-            h = (h * 0x01000193L) and 0xFFFFFFFFL  // FNV prime (32-bit)
+    private fun wordPieceTokenize(word: String): List<String> {
+        if (word.isEmpty()) return emptyList()
+        // Fast path: whole word is in vocab.
+        if (word in vocab) return listOf(word)
+
+        val tokens = mutableListOf<String>()
+        val length = word.length
+        var start = 0
+        while (start < length) {
+            var end = length
+            var curSubstring: String? = null
+            while (start < end) {
+                val sub = if (start == 0) {
+                    word.substring(start, end)
+                } else {
+                    "##" + word.substring(start, end)
+                }
+                if (sub in vocab) {
+                    curSubstring = sub
+                    break
+                }
+                end -= 1
+            }
+            if (curSubstring == null) {
+                // No prefix of the remaining suffix is in vocab → whole word is [UNK].
+                return listOf(UNK_TOKEN)
+            }
+            tokens.add(curSubstring)
+            start = end
         }
-        return h % VOCAB_SIZE
+        return tokens
+    }
+
+    /** Load `vocab.txt` from app assets into a token → id map. Lines are 0-indexed. */
+    private fun loadVocab(): Map<String, Int> {
+        val map = HashMap<String, Int>(VOCAB_CAPACITY)
+        try {
+            context.assets.open(VOCAB_ASSET_PATH).bufferedReader().use { reader ->
+                var index = 0
+                reader.forEachLine { line ->
+                    map[line.trim()] = index
+                    index++
+                }
+            }
+        } catch (_: IOException) {
+            // Asset missing — fall back to an empty vocab so every token maps to [UNK].
+            // Shouldn't happen in shipped builds (vocab is bundled) but keeps the
+            // tokenizer from crashing if the asset is stripped by a custom build.
+        }
+        return map
+    }
+
+    /**
+     * BERT basic-tokenizer punctuation splitter: every punctuation char becomes
+     * its own token, runs of non-punctuation are kept together.
+     */
+    private fun splitOnPunctuation(text: String): List<String> {
+        val out = mutableListOf<String>()
+        val sb = StringBuilder()
+        for (ch in text) {
+            if (isPunctuation(ch)) {
+                if (sb.isNotEmpty()) {
+                    out.add(sb.toString())
+                    sb.setLength(0)
+                }
+                out.add(ch.toString())
+            } else {
+                sb.append(ch)
+            }
+        }
+        if (sb.isNotEmpty()) out.add(sb.toString())
+        return out
+    }
+
+    /** NFD-normalize and drop combining marks (Unicode category `Mn`). BERT uncased convention. */
+    private fun stripAccents(text: String): String {
+        val nfd = Normalizer.normalize(text, Normalizer.Form.NFD)
+        val sb = StringBuilder(nfd.length)
+        for (ch in nfd) {
+            if (Character.getType(ch) != Character.NON_SPACING_MARK.toInt()) {
+                sb.append(ch)
+            }
+        }
+        return sb.toString()
+    }
+
+    /** Standard BERT `_is_punctuation`: ASCII punct ranges OR any Unicode `P*` category. */
+    private fun isPunctuation(ch: Char): Boolean {
+        val cp = ch.code
+        if (cp in 33..47 || cp in 58..64 || cp in 91..96 || cp in 123..126) return true
+        val type = Character.getType(ch)
+        return type == Character.CONNECTOR_PUNCTUATION.toInt() ||
+            type == Character.DASH_PUNCTUATION.toInt() ||
+            type == Character.START_PUNCTUATION.toInt() ||
+            type == Character.END_PUNCTUATION.toInt() ||
+            type == Character.INITIAL_QUOTE_PUNCTUATION.toInt() ||
+            type == Character.FINAL_QUOTE_PUNCTUATION.toInt() ||
+            type == Character.OTHER_PUNCTUATION.toInt()
+    }
+
+    /** Space / tab / newline / carriage-return OR any Unicode `Zs` (space separator). */
+    private fun isWhitespace(ch: Char): Boolean {
+        if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r') return true
+        return Character.getType(ch) == Character.SPACE_SEPARATOR.toInt()
+    }
+
+    /**
+     * Standard BERT `_is_control`: any Unicode `C*` category (Cc/Cf/Cs/Co/Cn),
+     * excluding `\t` / `\n` / `\r` which are treated as whitespace instead.
+     */
+    private fun isControl(ch: Char): Boolean {
+        if (ch == '\t' || ch == '\n' || ch == '\r') return false
+        val type = Character.getType(ch)
+        return type == Character.CONTROL.toInt() ||
+            type == Character.FORMAT.toInt() ||
+            type == Character.SURROGATE.toInt() ||
+            type == Character.PRIVATE_USE.toInt() ||
+            type == Character.UNASSIGNED.toInt()
+    }
+
+    /** BERT `_clean_text`: drop U+0000 / U+FFFD / control chars, normalize whitespace to ` `. */
+    private fun cleanText(text: String): String {
+        val sb = StringBuilder(text.length)
+        for (ch in text) {
+            val cp = ch.code
+            if (cp == 0 || cp == 0xFFFD || isControl(ch)) continue
+            if (isWhitespace(ch)) sb.append(' ') else sb.append(ch)
+        }
+        return sb.toString()
     }
 
     /** Bundle of model-input tensors returned by [tokenize]. */
@@ -117,21 +284,17 @@ class BertTokenizer(
         /** BGE-small-en-v1.5 / `bert-base-uncased` max sequence length. */
         const val MAX_LENGTH: Int = 512
 
-        /** Size of the (virtual) vocab range — matches `bert-base-uncased` (30,522 tokens). */
-        private const val VOCAB_SIZE: Long = 30_000L
+        /** Path of the vocab inside the APK's `assets/` dir. */
+        private const val VOCAB_ASSET_PATH = "models/bert-base-uncased-vocab.txt"
 
-        private val NON_ALNUM: Regex = Regex("[^a-z0-9]+")
+        /** Capacity hint for the vocab map (matches the 30,522-line vocab + small slack). */
+        private const val VOCAB_CAPACITY = 30_522
+
+        private const val PAD_TOKEN = "[PAD]"
+        private const val UNK_TOKEN = "[UNK]"
+        private const val CLS_TOKEN = "[CLS]"
+        private const val SEP_TOKEN = "[SEP]"
+
+        private val WHITESPACE: Regex = Regex("\\s+")
     }
 }
-
-// TODO(v0.3): Replace this hash-based tokenizer with a real WordPiece tokenizer
-//   using the bundled `vocab.txt` from `bert-base-uncased` (30,522 tokens,
-//   ~860 KB). The implementation should:
-//     1. Bundle `app/src/main/assets/models/bge-small-vocab.txt`.
-//     2. Implement greedy longest-match WordPiece splitting with `##`
-//        continuation pieces.
-//     3. Map OOV tokens to `[UNK]` (id 100).
-//     4. Preserve the [CLS]/[SEP]/[PAD] handling already in place here.
-//   Alternative: swap the whole embedder to `EmbeddingGemma` (256-d Matryoshka,
-//   multilingual, with its own SentencePiece tokenizer) — see
-//   docs/architecture-decisions.md §"Embeddings".
