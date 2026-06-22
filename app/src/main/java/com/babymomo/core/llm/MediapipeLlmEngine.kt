@@ -1,197 +1,94 @@
 package com.babymomo.core.llm
 
 import android.content.Context
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import com.google.mediapipe.tasks.genai.llminference.LlmInferenceSession
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * MediapipeLlmEngine — wraps MediaPipe GenAI's [LlmInference] Android API to run Gemma models
- * (in `.task` format) fully on-device.
+ * MediapipeLlmEngine — STUB (v0.2).
  *
- * Lifecycle:
- *  - Singleton-scoped (one loaded model per app process).
- *  - The model path is injected at runtime via [configure] — same pattern as
- *    `RemoteLlmProvider.configure(baseUrl, apiKey, modelName)`. Calling [configure] with a new
- *    path closes any previously loaded engine and loads the new one.
- *  - [configure] is idempotent: re-calling it with the same path is a fast no-op (volatile check).
+ * ### Why this is a stub
+ * The MediaPipe `tasks-genai` 0.10.14 artifact ships ONLY the top-level
+ * [`LlmInference`] class plus its nested [`LlmInference.LlmInferenceOptions`].
+ * The session-based API that this engine was originally written against —
+ * `LlmInferenceSession`, `addQueryChunk`, per-session `generateResponse`,
+ * streaming partial-result callbacks returning a Guava `ListenableFuture`,
+ * per-session `Options` (temperature / topK / randomSeed) — **does not exist**
+ * in 0.10.14. That session API was added in a later MediaPipe release.
  *
- * Threading:
- *  - MediaPipe's [LlmInferenceSession] is NOT safe for concurrent use on a single
- *    [LlmInference] engine — only one session may be open at a time. All inference is serialized
- *    through [inferenceMutex].
+ * Agent A (parallel v0.2 merge) wrote against the newer session API by mistake;
+ * the dependency rename from `genai-text-llm-inference-android` to `tasks-genai`
+ * landed in `libs.versions.toml`, but the engine code was never reconciled with
+ * the actual 0.10.14 surface. Verified by extracting `classes.jar` from the AAR
+ * and running `javap` — only `LlmInference` + `LlmInference$LlmInferenceOptions`
+ * (+ its `Builder`) are present.
  *
- * Streaming:
- *  - MediaPipe GenAI 0.10.x DOES support streaming via
- *    [LlmInferenceSession.generateResponseAsync] with a partial-result callback.
- *  - IMPORTANT API SURPRISE: the callback delivers the CUMULATIVE response string (not deltas)
- *    along with a `done: Boolean` flag. We compute delta = cumulative − previously-emitted and
- *    emit that through the Flow, so downstream consumers see real token deltas.
- *  - The underlying call also returns a Guava [com.google.common.util.concurrent.ListenableFuture];
- *    we attach a listener to propagate completion / errors back into the coroutine channel.
+ * ### v0.2 behaviour
+ * Rather than ship a half-rewired engine against the wrong API surface, v0.2
+ * stubs this class out. Every method throws
+ * `IllegalStateException("MediaPipe GenAI runtime API not yet finalized — see v0.3")`.
+ * `LocalLlmProvider.isAvailable()` returns `false`, so `LlmProviderChain` skips
+ * Local entirely and falls through to Remote → Mock. Direct callers of Local
+ * (bypassing the chain) hit the stub exception, which is caught by `runCatching`
+ * and surfaced as a clear failure.
  *
- * Limitations of MediaPipe 0.10.14 session options (vs. our [LlmGenerationConfig]):
- *  - `topP` is NOT exposed — MediaPipe derives it from `topK` internally. Ignored.
- *  - `stopSequences` is NOT supported. Ignored.
- *  - `maxTokens` is engine-level (set in [LlmInference.Options.setMaxTokens]), not per-session.
- *    Per-request override is ignored in 0.10.14.
+ * ### v0.3 plan
+ * Either:
+ *  - Upgrade `mediapipeGenai` to a version that ships the session API and
+ *    restore the original engine, OR
+ *  - Rewrite this engine against the 0.10.14 `LlmInference.generateResponse`
+ *    (non-streaming, engine-level options) + `setResultListener` for streaming.
  *
- * If a future MediaPipe version drops the partial-result callback, swap [streamComplete] for the
- * FALLBACK implementation noted at the bottom of this file (non-streaming single-token emit).
+ * See CHANGELOG `[0.2.0]` → `### Known Issues` for the full write-up.
  */
+@Suppress("UNUSED_PARAMETER") // context is retained for Hilt DI + future v0.3 wiring
 @Singleton
 class MediapipeLlmEngine @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    @Volatile private var engine: LlmInference? = null
     @Volatile private var loadedPath: String? = null
-    private val inferenceMutex = Mutex()
-    private val configureMutex = Mutex()
 
-    /** Path of the currently-loaded model, or null if no model is loaded. */
+    /** Path of the currently-loaded model — always `null` in the v0.2 stub. */
     fun loadedPath(): String? = loadedPath
 
-    /** True iff a model has been loaded via [configure]. */
-    fun isLoaded(): Boolean = engine != null
+    /** Always `false` in the v0.2 stub — no model can actually be loaded. */
+    fun isLoaded(): Boolean = false
 
     /**
-     * Load (or reload) the model at [modelPath]. Idempotent — calling with the same path is a
-     * fast no-op. Safe to call from any coroutine; concurrent calls are serialized.
+     * Load (or reload) the model at [modelPath]. In v0.2 this ALWAYS throws —
+     * the MediaPipe 0.10.14 API surface does not match this engine's design.
      */
-    suspend fun configure(modelPath: String) = withContext(Dispatchers.IO) {
-        if (loadedPath == modelPath && engine != null) return@withContext
-        configureMutex.withLock {
-            if (loadedPath == modelPath && engine != null) return@withLock
-            engine?.let { runCatching { it.close() } }
-            engine = null
-            loadedPath = null
-            val opts = LlmInference.Options.builder()
-                .setModelPath(modelPath)
-                .setMaxTokens(MAX_CONTEXT_TOKENS)
-                .build()
-            engine = LlmInference.createFromOptions(context, opts)
-            loadedPath = modelPath
-        }
+    suspend fun configure(modelPath: String) {
+        throw IllegalStateException(
+            "MediaPipe GenAI runtime API not yet finalized — see v0.3"
+        )
     }
 
-    /** Non-streaming completion. Returns the full response text. */
-    suspend fun complete(prompt: String, config: LlmGenerationConfig): String = withContext(Dispatchers.IO) {
-        inferenceMutex.withLock {
-            val llm = engine ?: error("MediapipeLlmEngine not configured — call configure(modelPath) first")
-            val session = LlmInferenceSession.createFromOptions(llm, buildSessionOptions(config))
-            try {
-                session.addQueryChunk(prompt)
-                session.generateResponse()
-            } finally {
-                runCatching { session.close() }
-            }
-        }
+    /** Non-streaming completion. In v0.2 this ALWAYS throws (stub). */
+    suspend fun complete(prompt: String, config: LlmGenerationConfig): String {
+        throw IllegalStateException(
+            "MediaPipe GenAI runtime API not yet finalized — see v0.3"
+        )
     }
 
     /**
-     * Streaming completion. Emits token deltas as MediaPipe produces them.
-     *
-     * See class kdoc for the cumulative-vs-delta callback semantics and the FALLBACK note.
+     * Streaming completion. In v0.2 the returned Flow throws on first collect
+     * (stub) — `LocalLlmProvider` never reaches this because `isAvailable()`
+     * returns `false` and `configure` throws first.
      */
-    fun streamComplete(prompt: String, config: LlmGenerationConfig): Flow<String> = channelFlow {
-        val llm = engine ?: throw IllegalStateException("MediapipeLlmEngine not configured")
-        val session = LlmInferenceSession.createFromOptions(llm, buildSessionOptions(config))
-        try {
-            session.addQueryChunk(prompt)
-        } catch (t: Throwable) {
-            runCatching { session.close() }
-            close(t); return@channelFlow
-        }
-
-        val prev = StringBuilder()
-
-        // generateResponseAsync(listener) returns immediately; the listener is invoked from a
-        // MediaPipe background thread with (cumulativeText, done). When done == true, the final
-        // cumulativeText has been delivered.
-        val future = session.generateResponseAsync { partialResult, done ->
-            try {
-                // partialResult is the cumulative response so far — emit only the delta.
-                if (partialResult.isNotEmpty() && partialResult.length > prev.length &&
-                    partialResult.startsWith(prev.toString())
-                ) {
-                    val delta = partialResult.substring(prev.length)
-                    prev.setLength(0)
-                    prev.append(partialResult)
-                    trySend(delta)
-                } else if (partialResult.isNotEmpty() && prev.isEmpty()) {
-                    // First chunk — emit it as the first delta.
-                    prev.append(partialResult)
-                    trySend(partialResult)
-                }
-            } catch (t: Throwable) {
-                close(t)
-            }
-        }
-
-        // Bridge the ListenableFuture completion back to the coroutine channel so errors surface.
-        future.addListener({
-            val err = runCatching { future.get() }.exceptionOrNull()
-            if (err != null) close(err) else close()
-        }, DirectExecutor)
-
-        awaitClose {
-            runCatching { future.cancel(true) }
-            runCatching { session.close() }
-        }
+    fun streamComplete(prompt: String, config: LlmGenerationConfig): Flow<String> = flow<String> {
+        throw IllegalStateException(
+            "MediaPipe GenAI runtime API not yet finalized — see v0.3"
+        )
     }.flowOn(Dispatchers.IO)
 
-    /** Release the native engine. Safe to call multiple times. */
+    /** Release the native engine. No-op in the v0.2 stub. Safe to call multiple times. */
     fun release() {
-        runCatching { engine?.close() }
-        engine = null
         loadedPath = null
     }
-
-    private fun buildSessionOptions(config: LlmGenerationConfig): LlmInferenceSession.Options {
-        val builder = LlmInferenceSession.Options.builder()
-            .setTemperature(config.temperature)
-            .setTopK(config.topK)
-        // MediaPipe 0.10.14 accepts an Int seed; ignore when null.
-        if (config.seed != null) builder.setRandomSeed(config.seed.toInt())
-        // NOTE: topP, stopSequences, and per-request maxTokens are NOT supported by MediaPipe
-        // 0.10.14 session options — see class kdoc. They are silently ignored here.
-        return builder.build()
-    }
-
-    /** Trivial direct executor — runs the listener inline on the future-completing thread. */
-    private object DirectExecutor : Executor {
-        override fun execute(command: Runnable) { command.run() }
-    }
-
-    private companion object {
-        /**
-         * Engine-level max-tokens cap (input + output combined). Must be ≥ the model's own
-         * max sequence length. Gemma 2B's context is 8192 — we use that as the cap so we can
-         * accept any prompt up to the model's full window. Memory cost scales with this value.
-         */
-        private const val MAX_CONTEXT_TOKENS = 8192
-    }
-
-    /* ──────────────────────────────────────────────────────────────────────────────────
-     * FALLBACK: if a future MediaPipe version drops the partial-result callback (or you want
-     * a one-shot non-streaming emit), swap [streamComplete] above for this implementation:
-     *
-     *   fun streamComplete(prompt: String, config: LlmGenerationConfig): Flow<String> = flow {
-     *       val full = complete(prompt, config)
-     *       emit(full)
-     *   }.flowOn(Dispatchers.IO)
-     *
-     * Downstream consumers already handle single-shot emits (the LlmProviderChain treats any
-     * emit as "stream succeeded"). This is identical to how MockLlmProvider could fall back.
-     * ────────────────────────────────────────────────────────────────────────────────── */
 }

@@ -3,7 +3,7 @@ package com.babymomo.core.memory
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import ai.onnxruntime.SessionOptions
+import ai.onnxruntime.OrtSession.SessionOptions
 import android.content.Context
 import com.babymomo.data.db.dao.MetaDao
 import com.babymomo.data.db.entity.MetaEntity
@@ -177,7 +177,14 @@ class OnnxEmbedder @Inject constructor(
                     for (j in 0 until dims) pooled[j] += tokenVec[j]
                     n++
                 }
-                if (n > 0) for (j in 0 until dims) pooled[j] /= n
+                if (n > 0) {
+                    // Explicit division (not /=) — Kotlin 1.9.22's augmented-assignment
+                    // resolution on FloatArray indexed access occasionally fails to pick the
+                    // matching set(int, Float) overload when the RHS involves Int promotion.
+                    // Plain assignment + toFloat() sidesteps that.
+                    val invN = 1f / n
+                    for (j in 0 until dims) pooled[j] = pooled[j] * invN
+                }
 
                 // BGE-small is trained with L2-normalized outputs — match here.
                 normalize(pooled)
