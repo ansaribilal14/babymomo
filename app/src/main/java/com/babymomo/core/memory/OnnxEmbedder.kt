@@ -31,11 +31,15 @@ import kotlin.math.sqrt
  * `EmbeddingGemma`).
  *
  * ### Graceful degradation
- * If the real model asset is not bundled (only the `.placeholder` marker file
- * is present, as in dev builds that omit the ~33 MB binary), [ensureLoaded]
- * returns `false` and [embed] throws [IllegalStateException]. [EmbedderProvider]
- * is expected to catch this and fall back to [MockEmbedder] — so app
- * functionality never breaks when the model is absent.
+ * As of v0.3 the real ~33 MB int8 ONNX binary is bundled as an app asset, so
+ * [ensureLoaded] succeeds on first call and real 384-dim BGE embeddings are
+ * produced at runtime. The fallback path is still wired, however: if the asset
+ * is ever absent (someone deletes it from a custom build, asset extraction to
+ * `filesDir` fails with `IOException`, the file is corrupt, or an ABI-level
+ * `OrtSession` creation fails), [ensureLoaded] returns `false` and [embed]
+ * throws [IllegalStateException]. [EmbedderProvider] is expected to catch this
+ * and fall back to [MockEmbedder] — so app functionality never breaks when the
+ * model is unavailable.
  *
  * ### Inference pipeline
  * 1. Tokenize → `LongArray[512]` × 3 tensors (input_ids / attention_mask / token_type_ids).

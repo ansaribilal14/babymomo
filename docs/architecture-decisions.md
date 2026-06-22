@@ -57,7 +57,7 @@ This document summarizes the research that drove BABYMOMO's architecture. Two de
 - **Default:** `BAAI/bge-small-en-v1.5` — 384-dim, 33.4M params, ~33 MB int8 ONNX, MTEB 62.28, Apache 2.0.
 - **Runtime:** ONNX Runtime Mobile with NNAPI delegate (GPU/NPU acceleration on supported devices).
 - **Multilingual upgrade path:** `EmbeddingGemma` (256-d Matryoshka, multilingual) — drop-in replacement behind `Embedder` interface; re-embed all memories on switch.
-- **v0.1 status:** `OnnxEmbedder` is stubbed. Uses `MockEmbedder` (deterministic hash-based, 384-dim) for tests + first launch.
+- **v0.3 status:** The real ~33 MB int8 ONNX binary is bundled as an app asset at `app/src/main/assets/models/bge-small-en-v1.5-int8.onnx`. `OnnxEmbedder` loads it on first call and produces real 384-dim BGE embeddings at runtime. The model is sourced from `onnx-community/bge-small-en-v1.5-ONNX` (`onnx/model_quantized.onnx` + its external `model_quantized.onnx_data` weights), re-saved as a single all-embedded `.onnx` via Python `onnx` so ORT loads it from a single asset without external-data file juggling. Verified inputs (`input_ids` / `attention_mask` / `token_type_ids`, all `int64`) and outputs (`last_hidden_state` `[batch, seq, 384]` + `sentence_embedding` `[batch, 384]`) match the BERT input contract `OnnxEmbedder` was already written against. `MockEmbedder` remains as a transparent fallback if the asset is ever missing or fails to load. (The `BertTokenizer` is still hash-based in v0.3 — see its KDoc for the v0.4 WordPiece plan.)
 
 ### Bi-temporal model (adapted from Zep / Graphiti)
 
@@ -162,6 +162,13 @@ APK stays small (~85 MB). Users pick a model that fits their device's RAM from a
 ### Embeddings
 
 **Decision:** For v0.2 we wire `OnnxEmbedder` to run `BAAI/bge-small-en-v1.5` directly on-device via ONNX Runtime Mobile (`com.microsoft.onnxruntime:onnxruntime-android:1.17.0`). The int8-quantized ONNX model is bundled as an app asset (`app/src/main/assets/models/bge-small-en-v1.5-int8.onnx`) and `EmbedderProvider` routes to it on first use; `MockEmbedder` remains the transparent fallback when the asset is missing.
+
+**v0.3 update:** The real ~33 MB int8 ONNX binary is now bundled — the `.placeholder` marker is gone. Sourced from `onnx-community/bge-small-en-v1.5-ONNX`'s `onnx/model_quantized.onnx` (~414 KB graph) + its sibling `model_quantized.onnx_data` (~33 MB external weights), then re-saved as a single all-embedded `.onnx` (~33.8 MB) via Python `onnx` so ONNX Runtime loads it from a single asset without needing to also ship / extract a `.onnx_data` sibling. This adds ~33 MB to the APK but eliminates an entire category of "model not yet present" UI state from the memory pipeline — `MemoryService.addEpisodicMemory` can call `embedderProvider.current().embed(...)` unconditionally on the very first launch and get a real BGE embedding back. Verified ONNX I/O contract matches what `OnnxEmbedder` was already written against:
+
+- **Inputs:** `input_ids` `[batch, seq]`, `attention_mask` `[batch, seq]`, `token_type_ids` `[batch, seq]` — all `int64` (ONNX dtype 7). `OnnxEmbedder` already feeds these three tensors.
+- **Outputs:** `last_hidden_state` `[batch, seq, 384]` (returned first, consumed by `OnnxEmbedder.runInference` via `result.get(0)`) + `sentence_embedding` `[batch, 384]` (pre-pooled, currently ignored — `OnnxEmbedder` mean-pools `last_hidden_state` over `attention_mask=1` tokens itself, per BGE convention).
+
+`onnx.checker.check_model` passes on the bundled file.
 
 **Why BGE-small-en-v1.5 won the embedding slot:**
 
