@@ -23,12 +23,12 @@ import kotlin.math.sqrt
  * embeddings through the standard BERT input contract (`input_ids` /
  * `attention_mask` / `token_type_ids`).
  *
- * ### Tokenizer caveat (v0.2)
- * Tokenization is handled by [BertTokenizer] — a minimal hash-based stand-in,
- * NOT real BGE WordPiece. The model still produces meaningful (if
- * downgraded) semantic vectors; see `BertTokenizer.kt`'s KDoc for the v0.3
- * upgrade plan (bundle `vocab.txt` + proper WordPiece, or swap to
- * `EmbeddingGemma`).
+ * ### Tokenizer (v0.3)
+ * Tokenization is handled by [BertTokenizer] — a real BERT WordPiece tokenizer
+ * backed by the bundled `bert-base-uncased` 30,522-token `vocab.txt`. The model
+ * now sees the same token-id distribution it was trained on, so semantic
+ * quality matches the BGE-small reference numbers. See `BertTokenizer.kt`'s
+ * KDoc for the full algorithm.
  *
  * ### Graceful degradation
  * As of v0.3 the real ~33 MB int8 ONNX binary is bundled as an app asset, so
@@ -56,13 +56,13 @@ import kotlin.math.sqrt
 @Singleton
 class OnnxEmbedder @Inject constructor(
     @ApplicationContext private val ctx: Context,
-    private val metaDao: MetaDao
+    private val metaDao: MetaDao,
+    private val tokenizer: BertTokenizer
 ) : Embedder {
     override val modelName: String = MODEL_NAME
     override val dims: Int = DIMS
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
-    private val tokenizer: BertTokenizer = BertTokenizer()
 
     @Volatile private var session: OrtSession? = null
     /** Set true once we've decided the model is unavailable, so we don't retry every call. */
