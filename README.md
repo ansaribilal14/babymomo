@@ -150,7 +150,7 @@ Or open the project in Android Studio and let Gradle sync.
 ## ⏳ What's stubbed for v0.2
 
 - **On-device LLM inference** — `LocalLlmProvider` detects downloaded models but the actual MediaPipe / llama.cpp / MLC-LLM runtime bridge is pending. Until then, the app uses `MockLlmProvider` so the UI is fully functional.
-- **On-device embeddings** — `OnnxEmbedder` (BGE-small-en-v1.5) is stubbed. Currently uses `MockEmbedder` (deterministic hash-based, 384-dim).
+- **On-device embeddings** — `OnnxEmbedder` (BGE-small-en-v1.5) is now wired: when the real int8 ONNX model is bundled as an app asset (`app/src/main/assets/models/bge-small-en-v1.5-int8.onnx`), it loads via ONNX Runtime Mobile (with NNAPI delegate) and produces real 384-dim semantic embeddings. Dev/CI builds ship only a `.placeholder` marker file (the ~33 MB real model is intentionally omitted from the repo — see the placeholder for the HF download URL); in that case `EmbedderProvider` transparently falls back to `MockEmbedder` (deterministic hash-based, 384-dim). **v0.2 caveat:** the bundled tokenizer is a minimal hash-based stand-in, NOT real BGE WordPiece — embeddings work but are lower-quality until the v0.3 vocab.txt upgrade.
 - **PDF analysis skill** — returns a status message.
 - **Model download** — UI shows catalog but the download worker is pending.
 

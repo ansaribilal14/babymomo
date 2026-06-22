@@ -158,3 +158,40 @@ APK stays small (~85 MB). Users pick a model that fits their device's RAM from a
 **Why stream-to-temp-file + atomic rename:** if the process is killed mid-download (OOM, user force-stop), the temp file is left behind and cleaned up on the next attempt. The final file only ever exists at its final name in a fully-downloaded + verified state — the loader (`LocalLlmProvider` / `MediapipeLlmEngine`) never sees a partial file. The rename is atomic on the same filesystem; if it fails (cross-FS edge case) we fall back to `copyTo(overwrite=true)` + delete.
 
 **What the UI sees:** `ModelsViewModel.downloadStateFlow(modelId)` returns a cold `Flow<DownloadState>` (Idle / Downloading(bytes, total) / Verifying / Complete / Failed) backed by `getWorkInfosForUniqueWorkFlow`. `ModelsScreen.ModelCard` collects it with `collectAsStateWithLifecycle(initialValue = Idle)` and renders a `LinearProgressIndicator` + Cancel button during `DOWNLOADING`, a Retry button + error message during `ERROR`, and the existing Activate button once the model row's status flips to `READY` (driven by the Room `Flow`, not the WorkInfo).
+
+### Embeddings
+
+**Decision:** For v0.2 we wire `OnnxEmbedder` to run `BAAI/bge-small-en-v1.5` directly on-device via ONNX Runtime Mobile (`com.microsoft.onnxruntime:onnxruntime-android:1.17.0`). The int8-quantized ONNX model is bundled as an app asset (`app/src/main/assets/models/bge-small-en-v1.5-int8.onnx`) and `EmbedderProvider` routes to it on first use; `MockEmbedder` remains the transparent fallback when the asset is missing.
+
+**Why BGE-small-en-v1.5 won the embedding slot:**
+
+1. **Right-sized for personal memory.** 384-dim × 50k memories = ~76 MB resident in the flat-cosine index — fits comfortably on a 4 GB phone alongside the LLM. A 768-d model would double that for ~2 MTEB points we don't need at personal scale.
+2. **Tiny binary footprint.** ~33 MB int8 ONNX — small enough to bundle in the APK rather than download. This keeps v0.2 simple (no separate embedding-model downloader; no "embedding model not yet downloaded" state to manage) and lets the model ship pre-warmed for first launch.
+3. **Apache-2.0 license.** Permissive — no GPL/CC-BY-NC entanglement for a commercial Android app.
+4. **MTEB 62.28.** Solidly above `all-MiniLM-L6-v2` (56.3) and competitive with 768-d `bge-base-en-v1.5` (63.6) at a quarter of the dims. Good enough for semantic recall against Gemma-generated extraction text.
+5. **Mature ONNX story.** `onnx-community/bge-small-en-v1.5-ONNX` publishes ready-to-use int8/quantized variants — no PyTorch → ONNX export step on our side.
+
+**Why ONNX Runtime Mobile (not MediaPipe / llama.cpp):**
+
+- BGE is a pure transformer encoder — ONNX Runtime is the canonical runtime for that class of model on Android. MediaPipe's text tasks don't cover encoder-only embedding models today.
+- The `onnxruntime-android` AAR ships per-ABI native libs in-tree (same shape as the MediaPipe LLM dependency we already accept) — no NDK build on our side.
+- `SessionOptions.addNnapi()` routes supported ops to the Android NNAPI delegate, which transparently targets GPU/NPU on capable devices and falls back to the CPU provider elsewhere. We wrap the call in `runCatching` so devices/emulators without NNAPI features degrade to CPU without crashing.
+
+**Why bundled-as-asset (not downloaded):**
+
+- The LLM model is user-downloadable because it's 1–4 GB and users need to pick a size that fits their device. The embedding model is 33 MB — small enough to bundle, large enough that bundling matters for first-launch latency.
+- Bundling eliminates an entire category of "model not yet present" UI state from the memory pipeline. `MemoryService.addEpisodicMemory` can call `embedderProvider.current().embed(...)` unconditionally on the very first launch and get a real embedding back.
+- The trade-off is a ~33 MB larger APK. Acceptable for v0.2; revisit if Play Store size policy or app-growth priorities change.
+
+**Graceful degradation when the asset is missing:**
+
+Dev / CI builds ship only a `bge-small-en-v1.5-int8.onnx.placeholder` marker file (the ~33 MB real binary is intentionally omitted from the repo — see the placeholder file for the HF download URL). `OnnxEmbedder.ensureLoaded()` detects this via `AssetManager.open()` → `FileNotFoundException`, marks itself unavailable, and returns `false`. `EmbedderProvider.current()` then returns `MockEmbedder` transparently — the rest of the app never sees a missing-model exception. This is the same "always-available fallback" pattern the LLM provider chain uses.
+
+**v0.2 limitation — minimal hash-based tokenizer (NOT real BGE WordPiece):**
+
+The real BGE-small-en-v1.5 expects WordPiece token IDs from its 30,522-token `vocab.txt` (the `bert-base-uncased` vocab). For v0.2 we did NOT bundle that vocab — instead `BertTokenizer` lowercases, splits on `[^a-z0-9]+`, and hashes each token to a stable int in `[0, 30_000)` via FNV-1a. The input_ids land inside the model's embedding table (same range as the real vocab), so the model still runs end-to-end and produces contextual pooled vectors — but they are NOT the IDs the model was trained on, so semantic quality is degraded vs. a proper WordPiece tokenizer. This is enough for v0.2 development + integration testing of the retrieval pipeline (the reranker's graph + recency + confidence signals carry most of the load until embeddings improve). See `BertTokenizer.kt` KDoc for the full caveat.
+
+**v0.3 plan:**
+
+1. **Preferred:** bundle `bert-base-uncased`'s 860 KB `vocab.txt` and implement real greedy-longest-match WordPiece (with `##` continuation pieces, `[UNK]` mapping, and the `[CLS]`/`[SEP]`/`[PAD]` handling already in place). This is a tokenizer-only change — the model file, `OnnxEmbedder`, and `EmbedderProvider` stay untouched.
+2. **Alternative:** swap the whole embedder to `EmbeddingGemma` (256-d Matryoshka, multilingual, with its own SentencePiece tokenizer). This is a drop-in behind the `Embedder` interface but requires re-embedding all stored memories (the dim change is breaking). Tracked under the v0.3 multilingual upgrade.
