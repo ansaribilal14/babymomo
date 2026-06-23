@@ -69,9 +69,10 @@ fun BabymomoApp() {
     val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = com.babymomo.core.common.AppSettings())
 
     if (!settings.onboardingCompleted) {
+        val onboardingScope = rememberCoroutineScope()
         com.babymomo.ui.onboarding.OnboardingScreen(
             onComplete = {
-                kotlinx.coroutines.MainScope().launch {
+                onboardingScope.launch {
                     settingsRepo.setOnboardingCompleted(true)
                 }
             }

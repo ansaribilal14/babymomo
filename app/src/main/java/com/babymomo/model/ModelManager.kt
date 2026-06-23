@@ -28,7 +28,11 @@ class ModelManager @Inject constructor(private val modelDao: ModelDao) {
     }
 
     suspend fun seedCatalogIfEmpty() {
-        val existing = modelDao.allFlow().first { it.isNotEmpty() }
+        // BUG FIX: previously used `first { it.isNotEmpty() }` which hangs FOREVER
+        // when the DB is empty (the predicate never returns true, so first() never completes).
+        // This caused the app to be stuck on the "Preparing your AI brain..." loading screen.
+        // Fix: use plain `first()` which returns immediately (even on an empty list).
+        val existing = modelDao.allFlow().first()
         if (existing.isNotEmpty()) return
         modelDao.upsertAll(DEFAULT_CATALOG.map { it.copy() })
     }
