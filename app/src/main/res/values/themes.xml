@@ -3,11 +3,8 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
     </style>
-    <style name="Theme.BABYMOMO.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/warm_cream</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
-        <item name="postSplashScreenTheme">@style/Theme.BABYMOMO</item>
+    <style name="Theme.BABYMOMO.Splash" parent="Theme.BABYMOMO">
+        <item name="android:windowBackground">@color/warm_cream</item>
     </style>
 </resources>

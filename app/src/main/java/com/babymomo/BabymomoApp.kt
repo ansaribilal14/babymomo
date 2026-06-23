@@ -1,6 +1,7 @@
 package com.babymomo
 
 import android.app.Application
+import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.babymomo.core.common.SettingsRepository
@@ -29,24 +30,35 @@ class BabymomoApp : Application(), Configuration.Provider {
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
-            .setMinimumLoggingLevel(android.util.Log.INFO)
+            .setMinimumLoggingLevel(Log.INFO)
             .build()
 
     override fun onCreate() {
         super.onCreate()
+
+        // Global uncaught exception handler — log crashes to logcat so we can diagnose
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("BABYMOMO", "Uncaught exception on ${thread.name}", throwable)
+            previousHandler?.uncaughtException(thread, throwable)
+        }
+
         File(filesDir, "models").mkdirs()
         appScope.launch {
             // Seed the model catalog so the onboarding screen can find the default model
             runCatching { modelManager.seedCatalogIfEmpty() }
+                .onFailure { Log.e("BABYMOMO", "seedCatalogIfEmpty failed", it) }
             // Apply persisted remote LLM settings to the live provider on startup
             runCatching {
                 val s = settingsRepo.settings.first()
                 if (s.remoteEnabled && s.remoteApiKey.isNotBlank()) {
                     remoteProvider.configure(s.remoteBaseUrl, s.remoteApiKey, s.remoteModel)
                 }
-            }
+            }.onFailure { Log.e("BABYMOMO", "remote settings apply failed", it) }
             runCatching { MemoryMaintenanceWorker.enqueue(this@BabymomoApp) }
+                .onFailure { Log.e("BABYMOMO", "MemoryMaintenanceWorker enqueue failed", it) }
             runCatching { memoryMaintenance.runStartupSweep() }
+                .onFailure { Log.e("BABYMOMO", "memoryMaintenance sweep failed", it) }
         }
     }
 }
