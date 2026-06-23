@@ -42,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -61,21 +62,12 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BabymomoApp() {
-    // Check if onboarding has been completed (first-launch model download)
-    val settingsRepo = dagger.hilt.android.EntryPointAccessors.fromApplication(
-        LocalContext.current.applicationContext,
-        com.babymomo.core.common.OnboardingEntryPoint::class.java
-    ).settingsRepository()
-    val settings by settingsRepo.settings.collectAsStateWithLifecycle(initialValue = com.babymomo.core.common.AppSettings())
+    val vm: MainViewModel = hiltViewModel()
+    val settings by vm.settings.collectAsStateWithLifecycle()
 
     if (!settings.onboardingCompleted) {
-        val onboardingScope = rememberCoroutineScope()
         com.babymomo.ui.onboarding.OnboardingScreen(
-            onComplete = {
-                onboardingScope.launch {
-                    settingsRepo.setOnboardingCompleted(true)
-                }
-            }
+            onComplete = { vm.setOnboardingCompleted() }
         )
         return
     }
