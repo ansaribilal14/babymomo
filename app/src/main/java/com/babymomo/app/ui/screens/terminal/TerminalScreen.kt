@@ -93,14 +93,12 @@ fun TerminalScreen(navController: NavController, viewModel: TerminalViewModel = 
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 items(uiState.output) { line ->
-                    SelectionContainer {
-                        Text(
-                            line,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (line.startsWith("$")) ElectricTeal else PureWhite
-                        )
-                    }
+                    Text(
+                        line,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (line.startsWith("$")) ElectricTeal else PureWhite
+                    )
                 }
             }
 
