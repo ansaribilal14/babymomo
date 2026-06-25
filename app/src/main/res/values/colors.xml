@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_primary">#0A0E27</color>
+    <color name="background_secondary">#111633</color>
+    <color name="background_surface">#1A1F3D</color>
+    <color name="background_elevated">#232849</color>
+    <color name="accent_primary">#00E5CC</color>
+    <color name="accent_secondary">#7C3AED</color>
+    <color name="accent_tertiary">#FF6B6B</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B8D4</color>
+    <color name="text_tertiary">#6B7394</color>
+    <color name="divider">#2A3050</color>
+    <color name="error">#FF4D6A</color>
+    <color name="success">#00E5CC</color>
+    <color name="warning">#FFB74D</color>
+    <color name="memory_working">#FFB74D</color>
+    <color name="memory_episodic">#64B5F6</color>
+    <color name="memory_semantic">#00E5CC</color>
+    <color name="memory_procedural">#7C3AED</color>
+    <color name="chat_user_bubble">#1A3A5C</color>
+    <color name="chat_ai_bubble">#1A1F3D</color>
+    <color name="status_active">#00E5CC</color>
+    <color name="status_inactive">#6B7394</color>
+</resources>
