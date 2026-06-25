@@ -83,16 +83,16 @@ class SkillRegistry @Inject constructor(
     private val shell: ShellSkill,
     private val pdf: PdfSkill
 ) {
-    private val allSkills: List<Skill> by lazy {
+    private val allSkillsList: List<Skill> by lazy {
         listOf(writeArticle, summarize, webSearch, calendar, shell, pdf)
     }
 
     fun matchSkill(input: String): Skill? {
         val lower = input.lowercase()
-        return allSkills.firstOrNull { skill ->
+        return allSkillsList.firstOrNull { skill ->
             skill.triggers.any { trigger -> lower.contains(trigger) }
         }
     }
 
-    fun getAllSkills(): List<Skill> = allSkills
+    fun getAllSkills(): List<Skill> = allSkillsList
 }
