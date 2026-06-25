@@ -15,9 +15,7 @@ class ProjectService @Inject constructor(
             name = name,
             description = description,
             status = "ACTIVE",
-            tasks = if (tasks.isNotEmpty()) kotlinx.serialization.json.Json.encodeToString(
-                kotlinx.serialization.json.buildJsonArray { tasks.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }
-            ) else null,
+            tasks = if (tasks.isNotEmpty()) kotlinx.serialization.json.buildJsonArray { tasks.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }.toString() else null,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )

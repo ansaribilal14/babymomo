@@ -7,6 +7,9 @@ import android.provider.CalendarContract
 import com.babymomo.app.core.sandbox.LinuxSandbox
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,12 +24,12 @@ interface Tool {
 class WebSearchTool @Inject constructor() : Tool {
     override val name = "web_search"
     override val description = "Search the web for current information"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("query", kotlinx.serialization.json.buildJsonObject {
-                put("type", "string")
-                put("description", "Search query")
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("query", buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                put("description", JsonPrimitive("Search query"))
             })
         })
     }
@@ -42,11 +45,11 @@ class NotificationTool @Inject constructor(
 ) : Tool {
     override val name = "send_notification"
     override val description = "Post a local Android notification"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("title", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
-            put("body", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("title", buildJsonObject { put("type", JsonPrimitive("string")) })
+            put("body", buildJsonObject { put("type", JsonPrimitive("string")) })
         })
     }
     override suspend fun execute(input: JsonObject): String {
@@ -77,10 +80,10 @@ class CalendarTool @Inject constructor(
 ) : Tool {
     override val name = "calendar_read"
     override val description = "Read upcoming calendar events"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("days_ahead", kotlinx.serialization.json.buildJsonObject { put("type", "integer") })
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("days_ahead", buildJsonObject { put("type", JsonPrimitive("integer")) })
         })
     }
     override suspend fun execute(input: JsonObject): String {
@@ -119,11 +122,11 @@ class CalendarCreateTool @Inject constructor(
 ) : Tool {
     override val name = "calendar_create"
     override val description = "Create a new calendar event"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("title", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
-            put("start_time", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("title", buildJsonObject { put("type", JsonPrimitive("string")) })
+            put("start_time", buildJsonObject { put("type", JsonPrimitive("string")) })
         })
     }
     override suspend fun execute(input: JsonObject): String {
@@ -137,10 +140,10 @@ class ShellTool @Inject constructor(
 ) : Tool {
     override val name = "shell_exec"
     override val description = "Run a shell command in the Linux sandbox"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("command", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("command", buildJsonObject { put("type", JsonPrimitive("string")) })
         })
     }
     override suspend fun execute(input: JsonObject): String {
@@ -157,11 +160,11 @@ class ShellTool @Inject constructor(
 class MemoryStoreTool @Inject constructor() : Tool {
     override val name = "memory_store"
     override val description = "Explicitly store a memory the AI decides is important"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("content", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
-            put("type", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("content", buildJsonObject { put("type", JsonPrimitive("string")) })
+            put("type", buildJsonObject { put("type", JsonPrimitive("string")) })
         })
     }
     override suspend fun execute(input: JsonObject): String {
@@ -174,10 +177,10 @@ class MemoryStoreTool @Inject constructor() : Tool {
 class MemoryRecallTool @Inject constructor() : Tool {
     override val name = "memory_recall"
     override val description = "Retrieve specific memories by keyword"
-    override val parameters = kotlinx.serialization.json.buildJsonObject {
-        put("type", "object")
-        put("properties", kotlinx.serialization.json.buildJsonObject {
-            put("query", kotlinx.serialization.json.buildJsonObject { put("type", "string") })
+    override val parameters = buildJsonObject {
+        put("type", JsonPrimitive("object"))
+        put("properties", buildJsonObject {
+            put("query", buildJsonObject { put("type", JsonPrimitive("string")) })
         })
     }
     override suspend fun execute(input: JsonObject): String {

@@ -26,7 +26,7 @@ class MemoryRecaller @Inject constructor(
 
         // Score each memory using 4-signal reranker
         val scored = allActive.map { memory ->
-            val cosineScore = vectorScores["mem_${memory.id}"] ?: 0.4f.toDouble()
+            val cosineScore = vectorScores["mem_${memory.id}"]?.toDouble() ?: 0.4
 
             val graphScore = calculateGraphProximity(query, memory)
             val confidenceScore = memory.confidence

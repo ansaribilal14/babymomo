@@ -7,6 +7,7 @@ import com.babymomo.app.core.llm.model.LlmChunk
 import com.babymomo.app.core.llm.model.Message
 import com.babymomo.app.core.llm.model.Tool
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.runBlocking
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -24,7 +25,7 @@ class WrappedLlmProvider @Inject constructor(
         messages: List<Message>,
         tools: List<Tool> = emptyList()
     ): Flow<LlmChunk> {
-        val systemPrompt = buildSystemPrompt(messages)
+        val systemPrompt = runBlocking { buildSystemPrompt(messages) }
         return llmChain.streamChat(systemPrompt, messages, tools)
     }
 
