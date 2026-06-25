@@ -11,11 +11,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.babymomo.app.core.sandbox.LinuxSandbox
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class TerminalUiState(
@@ -49,7 +53,7 @@ class TerminalViewModel @Inject constructor(
     }
 
     fun installSandbox() {
-        kotlinx.coroutines.MainScope().launch {
+        viewModelScope.launch {
             linuxSandbox.install()
             _uiState.update { it.copy(sandboxReady = true, output = listOf("Alpine Linux sandbox installed successfully.")) }
         }

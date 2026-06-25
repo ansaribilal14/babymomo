@@ -10,10 +10,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.navigation.NavController
 import com.babymomo.app.core.skills.Skill
 import com.babymomo.app.core.skills.SkillRegistry
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 
 data class SkillsUiState(val skills: List<Skill> = emptyList())
@@ -23,7 +27,7 @@ class SkillsViewModel @Inject constructor(
     private val skillRegistry: SkillRegistry
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SkillsUiState(skillRegistry.getAllSkills()))
-    val uiState: kotlinx.coroutines.flow.StateFlow<SkillsUiState> = _uiState
+    val uiState: StateFlow<SkillsUiState> = _uiState.asStateFlow()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
