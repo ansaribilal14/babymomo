@@ -19,10 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.babymomo.app.ui.screens.chat.ChatScreen
 import com.babymomo.app.ui.screens.heartbeat.HeartbeatScreen
 import com.babymomo.app.ui.screens.interactive.InteractiveScreen
@@ -36,21 +38,22 @@ import com.babymomo.app.ui.screens.terminal.TerminalScreen
 import com.babymomo.app.ui.theme.ElectricTeal
 import com.babymomo.app.ui.theme.DimBlue
 import com.babymomo.app.ui.theme.MidnightBlack
-import kotlinx.serialization.Serializable
 
-@Serializable data object ChatRoute
-@Serializable data object MemoryRoute
-@Serializable data object ProjectsRoute
-@Serializable data object ModelsRoute
-@Serializable data object SettingsRoute
-@Serializable data object SkillsRoute
-@Serializable data object HeartbeatRoute
-@Serializable data object TerminalRoute
-@Serializable data object McpRoute
-@Serializable data class InteractiveRoute(val descriptor: String = "")
+object Routes {
+    const val CHAT = "chat"
+    const val MEMORY = "memory"
+    const val PROJECTS = "projects"
+    const val MODELS = "models"
+    const val SETTINGS = "settings"
+    const val SKILLS = "skills"
+    const val HEARTBEAT = "heartbeat"
+    const val TERMINAL = "terminal"
+    const val MCP = "mcp"
+    const val INTERACTIVE = "interactive"
+}
 
 data class BottomNavItem(
-    val route: Any,
+    val route: String,
     val label: String,
     val icon: ImageVector
 )
@@ -59,11 +62,11 @@ data class BottomNavItem(
 fun BabymomoNavHost() {
     val navController = rememberNavController()
     val bottomItems = listOf(
-        BottomNavItem(ChatRoute, "Chat", Icons.Filled.Chat),
-        BottomNavItem(MemoryRoute, "Memory", Icons.Filled.Memory),
-        BottomNavItem(ProjectsRoute, "Projects", Icons.Filled.Folder),
-        BottomNavItem(ModelsRoute, "Models", Icons.Filled.Storage),
-        BottomNavItem(SettingsRoute, "Settings", Icons.Filled.Settings)
+        BottomNavItem(Routes.CHAT, "Chat", Icons.Filled.Chat),
+        BottomNavItem(Routes.MEMORY, "Memory", Icons.Filled.Memory),
+        BottomNavItem(Routes.PROJECTS, "Projects", Icons.Filled.Folder),
+        BottomNavItem(Routes.MODELS, "Models", Icons.Filled.Storage),
+        BottomNavItem(Routes.SETTINGS, "Settings", Icons.Filled.Settings)
     )
 
     Scaffold(
@@ -80,7 +83,7 @@ fun BabymomoNavHost() {
                         icon = { Icon(item.icon, contentDescription = item.label) },
                         label = { Text(item.label) },
                         selected = currentDestination?.hierarchy?.any {
-                            it.route == item.route::class.qualifiedName
+                            it.route == item.route
                         } == true,
                         onClick = {
                             navController.navigate(item.route) {
@@ -105,19 +108,19 @@ fun BabymomoNavHost() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = ChatRoute,
+            startDestination = Routes.CHAT,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable<ChatRoute> { ChatScreen(navController) }
-            composable<MemoryRoute> { MemoryScreen(navController) }
-            composable<ProjectsRoute> { ProjectsScreen(navController) }
-            composable<ModelsRoute> { ModelsScreen(navController) }
-            composable<SettingsRoute> { SettingsScreen(navController) }
-            composable<SkillsRoute> { SkillsScreen(navController) }
-            composable<HeartbeatRoute> { HeartbeatScreen(navController) }
-            composable<TerminalRoute> { TerminalScreen(navController) }
-            composable<McpRoute> { McpScreen(navController) }
-            composable<InteractiveRoute> { InteractiveScreen(navController) }
+            composable(Routes.CHAT) { ChatScreen(navController) }
+            composable(Routes.MEMORY) { MemoryScreen(navController) }
+            composable(Routes.PROJECTS) { ProjectsScreen(navController) }
+            composable(Routes.MODELS) { ModelsScreen(navController) }
+            composable(Routes.SETTINGS) { SettingsScreen(navController) }
+            composable(Routes.SKILLS) { SkillsScreen(navController) }
+            composable(Routes.HEARTBEAT) { HeartbeatScreen(navController) }
+            composable(Routes.TERMINAL) { TerminalScreen(navController) }
+            composable(Routes.MCP) { McpScreen(navController) }
+            composable(Routes.INTERACTIVE) { InteractiveScreen(navController) }
         }
     }
 }
