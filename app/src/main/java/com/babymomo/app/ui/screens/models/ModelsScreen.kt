@@ -10,12 +10,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.babymomo.app.model.ModelManager
 import com.babymomo.app.data.db.entities.ModelCatalogEntity
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,7 +33,7 @@ class ModelsViewModel @Inject constructor(private val modelManager: ModelManager
     init { loadModels() }
 
     fun loadModels() {
-        kotlinx.coroutines.MainScope().launch {
+        viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val models = modelManager.getCatalog()
             _uiState.update { it.copy(models = models, isLoading = false) }
@@ -37,11 +41,11 @@ class ModelsViewModel @Inject constructor(private val modelManager: ModelManager
     }
 
     fun activateModel(id: String) {
-        kotlinx.coroutines.MainScope().launch { modelManager.activateModel(id) }
+        viewModelScope.launch { modelManager.activateModel(id) }
     }
 
     fun deactivateModel() {
-        kotlinx.coroutines.MainScope().launch { modelManager.deactivateModel() }
+        viewModelScope.launch { modelManager.deactivateModel() }
     }
 }
 

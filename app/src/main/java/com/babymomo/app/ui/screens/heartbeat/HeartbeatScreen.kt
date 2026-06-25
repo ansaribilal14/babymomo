@@ -17,6 +17,7 @@ import com.babymomo.app.data.db.entities.HeartbeatLogEntity
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class HeartbeatUiState(val logs: List<HeartbeatLogEntity> = emptyList())

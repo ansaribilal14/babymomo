@@ -16,6 +16,7 @@ import androidx.lifecycle.viewModelScope
 import com.babymomo.app.core.memory.MemoryService
 import com.babymomo.app.data.db.dao.MemoryDao
 import com.babymomo.app.data.db.entities.MemoryEntity
+import androidx.navigation.NavController
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*

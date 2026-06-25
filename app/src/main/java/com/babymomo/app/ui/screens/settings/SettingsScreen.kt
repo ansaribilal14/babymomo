@@ -13,9 +13,13 @@ import androidx.lifecycle.ViewModel
 import androidx.navigation.NavController
 import com.babymomo.app.core.llm.RemoteLlmProvider
 import com.babymomo.app.core.llm.WrappedLlmProvider
-import com.babymomo.app.ui.nav.Route
+import com.babymomo.app.ui.nav.Routes
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -35,7 +39,7 @@ class SettingsViewModel @Inject constructor(
     private val remoteLlmProvider: RemoteLlmProvider
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsUiState())
-    val uiState: kotlinx.coroutines.flow.StateFlow<SettingsUiState> = _uiState
+    val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     fun saveProvider(name: String, apiKey: String, model: String) {
         remoteLlmProvider.saveProviderConfig(name, apiKey, model)
@@ -92,10 +96,10 @@ fun SettingsScreen(navController: NavController, viewModel: SettingsViewModel = 
             }
         }
 
-        TextButton(onClick = { navController.navigate(Route.Mcp) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("MCP Servers →", color = ElectricTeal) }
-        TextButton(onClick = { navController.navigate(Route.Terminal) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Terminal →", color = ElectricTeal) }
-        TextButton(onClick = { navController.navigate(Route.Heartbeat) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Heartbeat Log →", color = ElectricTeal) }
-        TextButton(onClick = { navController.navigate(Route.Skills) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Skills →", color = ElectricTeal) }
+        TextButton(onClick = { navController.navigate(Routes.MCP) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("MCP Servers →", color = ElectricTeal) }
+        TextButton(onClick = { navController.navigate(Routes.TERMINAL) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Terminal →", color = ElectricTeal) }
+        TextButton(onClick = { navController.navigate(Routes.HEARTBEAT) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Heartbeat Log →", color = ElectricTeal) }
+        TextButton(onClick = { navController.navigate(Routes.SKILLS) }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Skills →", color = ElectricTeal) }
 
         // About
         SectionHeader("About")
