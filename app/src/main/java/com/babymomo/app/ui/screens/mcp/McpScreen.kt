@@ -10,12 +10,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.babymomo.app.core.mcp.McpServerRegistry
 import com.babymomo.app.data.db.entities.McpServerEntity
 import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -34,7 +37,7 @@ class McpViewModel @Inject constructor(
     fun onUrlChange(url: String) = _uiState.update { it.copy(newUrl = url) }
 
     fun addServer() {
-        kotlinx.coroutines.MainScope().launch {
+        viewModelScope.launch {
             mcpServerRegistry.addServer(_uiState.value.newName, _uiState.value.newUrl)
             hideAddDialog()
         }
@@ -45,26 +48,32 @@ class McpViewModel @Inject constructor(
 @Composable
 fun McpScreen(navController: NavController, viewModel: McpViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsState()
-    val curatedServers = remember { McpServerRegistry(viewModel::class.java.getDeclaredField("mcpServerRegistry").get(viewModel) as McpServerRegistry).getCuratedServers() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(title = { Text("MCP Servers", color = ElectricTeal) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MidnightBlack))
 
-        // Curated servers
-        Text("Curated", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium, color = ElectricTeal)
+        Text("Curated Servers", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium, color = ElectricTeal)
+
         LazyColumn(modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(listOf("Fetch", "DeepWiki", "Context7")) { name ->
                 Surface(color = SurfaceNavy, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column { Text(name, color = PureWhite); Text("Curated MCP server", color = DimBlue, style = MaterialTheme.typography.bodySmall) }
-                        Button(onClick = { /* connect */ }, colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal, contentColor = MidnightBlack)) { Text("Connect") }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(name, color = PureWhite)
+                            Text("Curated MCP server", color = DimBlue, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Button(onClick = { /* connect */ }, colors = ButtonDefaults.buttonColors(containerColor = ElectricTeal, contentColor = MidnightBlack)) {
+                            Text("Connect")
+                        }
                     }
                 }
             }
         }
 
-        FloatingActionButton(onClick = viewModel::showAddDialog, containerColor = ElectricTeal, modifier = Modifier.padding(16.dp).align(alignment = androidx.compose.ui.Alignment.End)) {
-            Text("+", color = MidnightBlack)
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.End) {
+            FloatingActionButton(onClick = viewModel::showAddDialog, containerColor = ElectricTeal) {
+                Text("+", color = MidnightBlack)
+            }
         }
     }
 
@@ -75,12 +84,16 @@ fun McpScreen(navController: NavController, viewModel: McpViewModel = hiltViewMo
             containerColor = DeepNavy,
             text = {
                 Column {
-                    OutlinedTextField(value = uiState.newName, onValueChange = viewModel::onNameChange, label = { Text("Name") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ElectricTeal, focusedTextColor = PureWhite))
+                    OutlinedTextField(value = uiState.newName, onValueChange = viewModel::onNameChange, label = { Text("Name") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ElectricTeal, focusedTextColor = PureWhite, cursorColor = ElectricTeal))
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(value = uiState.newUrl, onValueChange = viewModel::onUrlChange, label = { Text("URL") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ElectricTeal, focusedTextColor = PureWhite))
+                    OutlinedTextField(value = uiState.newUrl, onValueChange = viewModel::onUrlChange, label = { Text("URL") }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = ElectricTeal, focusedTextColor = PureWhite, cursorColor = ElectricTeal))
                 }
             },
-            confirmButton = { TextButton(onClick = viewModel::addServer, enabled = uiState.newName.isNotBlank() && uiState.newUrl.isNotBlank()) { Text("Add", color = ElectricTeal) } }
+            confirmButton = {
+                TextButton(onClick = viewModel::addServer, enabled = uiState.newName.isNotBlank() && uiState.newUrl.isNotBlank()) {
+                    Text("Add", color = ElectricTeal)
+                }
+            }
         )
     }
 }

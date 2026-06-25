@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavController
 import com.babymomo.app.data.db.dao.HeartbeatLogDao
 import com.babymomo.app.data.db.entities.HeartbeatLogEntity
 import com.babymomo.app.ui.theme.*
@@ -27,7 +29,7 @@ class HeartbeatViewModel @Inject constructor(
     val uiState: StateFlow<HeartbeatUiState> = _uiState.asStateFlow()
 
     init {
-        kotlinx.coroutines.MainScope().launch {
+        viewModelScope.launch {
             heartbeatLogDao.getAll().collect { logs ->
                 _uiState.update { it.copy(logs = logs) }
             }

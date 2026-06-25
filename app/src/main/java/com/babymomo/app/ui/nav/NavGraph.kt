@@ -3,8 +3,10 @@ package com.babymomo.app.ui.nav
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -34,6 +36,18 @@ import com.babymomo.app.ui.screens.terminal.TerminalScreen
 import com.babymomo.app.ui.theme.ElectricTeal
 import com.babymomo.app.ui.theme.DimBlue
 import com.babymomo.app.ui.theme.MidnightBlack
+import kotlinx.serialization.Serializable
+
+@Serializable data object ChatRoute
+@Serializable data object MemoryRoute
+@Serializable data object ProjectsRoute
+@Serializable data object ModelsRoute
+@Serializable data object SettingsRoute
+@Serializable data object SkillsRoute
+@Serializable data object HeartbeatRoute
+@Serializable data object TerminalRoute
+@Serializable data object McpRoute
+@Serializable data class InteractiveRoute(val descriptor: String = "")
 
 data class BottomNavItem(
     val route: Any,
@@ -45,11 +59,11 @@ data class BottomNavItem(
 fun BabymomoNavHost() {
     val navController = rememberNavController()
     val bottomItems = listOf(
-        BottomNavItem(Route.Chat, "Chat", Icons.Filled.Chat),
-        BottomNavItem(Route.Memory, "Memory", Icons.Filled.Memory),
-        BottomNavItem(Route.Projects, "Projects", androidx.compose.material.icons.Icons.Filled.Folder),
-        BottomNavItem(Route.Models, "Models", androidx.compose.material.icons.Icons.Filled.Storage),
-        BottomNavItem(Route.Settings, "Settings", Icons.Filled.Settings)
+        BottomNavItem(ChatRoute, "Chat", Icons.Filled.Chat),
+        BottomNavItem(MemoryRoute, "Memory", Icons.Filled.Memory),
+        BottomNavItem(ProjectsRoute, "Projects", Icons.Filled.Folder),
+        BottomNavItem(ModelsRoute, "Models", Icons.Filled.Storage),
+        BottomNavItem(SettingsRoute, "Settings", Icons.Filled.Settings)
     )
 
     Scaffold(
@@ -91,21 +105,19 @@ fun BabymomoNavHost() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Route.Chat,
+            startDestination = ChatRoute,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable<Route.Chat> { ChatScreen(navController) }
-            composable<Route.Memory> { MemoryScreen(navController) }
-            composable<Route.Projects> { ProjectsScreen(navController) }
-            composable<Route.Models> { ModelsScreen(navController) }
-            composable<Route.Settings> { SettingsScreen(navController) }
-            composable<Route.Skills> { SkillsScreen(navController) }
-            composable<Route.Heartbeat> { HeartbeatScreen(navController) }
-            composable<Route.Terminal> { TerminalScreen(navController) }
-            composable<Route.Mcp> { McpScreen(navController) }
-            composable<Route.Interactive> {
-                InteractiveScreen(navController)
-            }
+            composable<ChatRoute> { ChatScreen(navController) }
+            composable<MemoryRoute> { MemoryScreen(navController) }
+            composable<ProjectsRoute> { ProjectsScreen(navController) }
+            composable<ModelsRoute> { ModelsScreen(navController) }
+            composable<SettingsRoute> { SettingsScreen(navController) }
+            composable<SkillsRoute> { SkillsScreen(navController) }
+            composable<HeartbeatRoute> { HeartbeatScreen(navController) }
+            composable<TerminalRoute> { TerminalScreen(navController) }
+            composable<McpRoute> { McpScreen(navController) }
+            composable<InteractiveRoute> { InteractiveScreen(navController) }
         }
     }
 }
