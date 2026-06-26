@@ -86,7 +86,7 @@ class ModelDownloadWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val modelCatalogDao: ModelCatalogDao,
     private val localLlmProvider: LocalLlmProvider
-) : CoroutineWorker(applicationContext, workerParams) {
+) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
         val modelId = inputData.getString("model_id") ?: return Result.failure()
