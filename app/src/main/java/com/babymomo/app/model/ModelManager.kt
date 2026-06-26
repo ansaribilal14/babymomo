@@ -8,6 +8,7 @@ import com.babymomo.app.data.db.dao.ModelCatalogDao
 import com.babymomo.app.data.db.entities.ModelCatalogEntity
 import com.babymomo.app.work.ModelDownloadWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton

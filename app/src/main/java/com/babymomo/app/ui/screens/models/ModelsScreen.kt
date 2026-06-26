@@ -13,8 +13,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
-import androidx.work.WorkInfo
-import androidx.work.WorkManager
 import com.babymomo.app.model.ModelManager
 import com.babymomo.app.data.db.entities.ModelCatalogEntity
 import com.babymomo.app.ui.theme.*
@@ -23,7 +21,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class ModelsUiState(
@@ -53,12 +50,7 @@ class ModelsViewModel @Inject constructor(
     fun downloadModel(id: String) {
         modelManager.startModelDownload(id)
         _uiState.update { it.copy(downloadingModelId = id, downloadProgress = 0) }
-
-        // Observe download progress
-        viewModelScope.launch {
-            WorkManager.getInstance(modelManager.let { /* context not directly accessible */ })
-            // The progress is observed in the composable via WorkManager
-        }
+        // Progress is observed from WorkManager in the composable
     }
 
     fun activateModel(id: String) {
