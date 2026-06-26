@@ -133,7 +133,7 @@ class ChatViewModel @Inject constructor(
                             state.copy(
                                 messages = state.messages.map { msg ->
                                     if (msg.id == assistantMsgId) msg.copy(
-                                        content = "Error: ${output.message}",
+                                        content = output.message, // Show the actual helpful message, not "Error: ..."
                                         isStreaming = false
                                     )
                                     else msg

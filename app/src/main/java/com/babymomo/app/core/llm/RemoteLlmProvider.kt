@@ -106,7 +106,7 @@ class RemoteLlmProvider @Inject constructor(
     ): Flow<LlmChunk> = flow {
         val configs = getProviderConfigs()
         val config = configs.firstOrNull()
-            ?: throw IllegalStateException("No remote LLM provider configured")
+            ?: throw IllegalStateException("No remote API key configured. This is optional — use on-device models for full privacy.")
 
         val apiMessages = buildList {
             add(mapOf("role" to "system", "content" to systemPrompt))
