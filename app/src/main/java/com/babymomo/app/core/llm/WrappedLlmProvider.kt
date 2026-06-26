@@ -6,6 +6,7 @@ import com.babymomo.app.core.llm.model.LlmChunk
 import com.babymomo.app.core.llm.model.Message
 import com.babymomo.app.core.llm.model.Tool
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
