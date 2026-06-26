@@ -12,10 +12,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class RequestClassifier @Inject constructor(
-    private val llmProvider: WrappedLlmProvider
-) {
-    suspend fun classify(userMessage: String): RouteType {
+class RequestClassifier @Inject constructor() {
+    fun classify(userMessage: String): RouteType {
         val lower = userMessage.lowercase()
         return when {
             lower.contains("quiz") || lower.contains("dashboard") ||
@@ -51,39 +49,42 @@ class MomoKernel @Inject constructor(
     fun streamProcess(messages: List<Message>): Flow<KernelOutput> = flow {
         val lastUserMsg = messages.lastOrNull { it.role == "user" }?.content ?: ""
         val route = requestClassifier.classify(lastUserMsg)
-
-        val tools = toolRegistry.getAvailableTools()
-        val toolDefs = tools.map { Tool(it.name, it.description, it.parameters) }
-
-        val chunkFlow = llmProvider.streamChat(messages, toolDefs)
-
-        val fullResponse = StringBuilder()
         var routingReason = route.name
 
-        chunkFlow.collect { chunk ->
-            when (chunk) {
-                is LlmChunk.Token -> {
-                    fullResponse.append(chunk.text)
-                    emit(KernelOutput.Token(chunk.text))
-                }
-                is LlmChunk.ToolCall -> {
-                    val result = toolRegistry.execute(chunk.name, chunk.input.toString())
-                    emit(KernelOutput.ToolUsed(chunk.name, result))
-                }
-                is LlmChunk.Done -> {
-                    // Process memory after response
-                    try {
-                        memoryService.processConversationTurn(lastUserMsg, fullResponse.toString())
-                    } catch (_: Exception) { }
-                    emit(KernelOutput.Done(routingReason))
-                }
-                is LlmChunk.Error -> {
-                    emit(KernelOutput.Error(chunk.message))
-                }
-                is LlmChunk.ToolResult -> {
-                    // Tool result handled internally
+        try {
+            val tools = toolRegistry.getAvailableTools()
+            val toolDefs = tools.map { Tool(it.name, it.description, it.parameters) }
+
+            val chunkFlow = llmProvider.streamChat(messages, toolDefs)
+            val fullResponse = StringBuilder()
+
+            chunkFlow.collect { chunk ->
+                when (chunk) {
+                    is LlmChunk.Token -> {
+                        fullResponse.append(chunk.text)
+                        emit(KernelOutput.Token(chunk.text))
+                    }
+                    is LlmChunk.ToolCall -> {
+                        val result = toolRegistry.execute(chunk.name, chunk.input.toString())
+                        emit(KernelOutput.ToolUsed(chunk.name, result))
+                    }
+                    is LlmChunk.Done -> {
+                        // Process memory after response (best-effort)
+                        try {
+                            memoryService.processConversationTurn(lastUserMsg, fullResponse.toString())
+                        } catch (_: Exception) { }
+                        emit(KernelOutput.Done(routingReason))
+                    }
+                    is LlmChunk.Error -> {
+                        emit(KernelOutput.Error(chunk.message))
+                    }
+                    is LlmChunk.ToolResult -> {
+                        // Tool result handled internally
+                    }
                 }
             }
+        } catch (e: Exception) {
+            emit(KernelOutput.Error("Stream error: ${e.message}"))
         }
     }
 }

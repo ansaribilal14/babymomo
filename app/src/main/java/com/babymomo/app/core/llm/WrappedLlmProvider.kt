@@ -1,13 +1,12 @@
 package com.babymomo.app.core.llm
 
 import com.babymomo.app.core.memory.MemoryRecaller
-import com.babymomo.app.core.memory.MemoryService
 import com.babymomo.app.core.projects.ProjectContextProvider
 import com.babymomo.app.core.llm.model.LlmChunk
 import com.babymomo.app.core.llm.model.Message
 import com.babymomo.app.core.llm.model.Tool
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.flow
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -24,9 +23,11 @@ class WrappedLlmProvider @Inject constructor(
     fun streamChat(
         messages: List<Message>,
         tools: List<Tool> = emptyList()
-    ): Flow<LlmChunk> {
-        val systemPrompt = runBlocking { buildSystemPrompt(messages) }
-        return llmChain.streamChat(systemPrompt, messages, tools)
+    ): Flow<LlmChunk> = flow {
+        // Build system prompt inside the flow — this is a suspend context,
+        // so we can call suspend functions directly. NO runBlocking!
+        val systemPrompt = buildSystemPrompt(messages)
+        emitAll(llmChain.streamChat(systemPrompt, messages, tools))
     }
 
     suspend fun complete(prompt: String): String {
@@ -42,37 +43,43 @@ class WrappedLlmProvider @Inject constructor(
         sb.appendLine()
 
         // [PROMOTED MEMORIES — PERMANENT]
-        val promoted = memoryRecaller.getPromotedMemories()
-        if (promoted.isNotEmpty()) {
-            sb.appendLine("[PROMOTED MEMORIES — PERMANENT]")
-            promoted.forEach { mem ->
-                sb.appendLine("- ${mem.content}")
-            }
-            sb.appendLine()
-        }
-
-        // [RECALLED MEMORIES — THIS TURN]
-        val lastUserMsg = messages.lastOrNull { it.role == "user" }?.content
-        if (lastUserMsg != null) {
-            val recalled = memoryRecaller.recall(lastUserMsg, topK = 8)
-            if (recalled.isNotEmpty()) {
-                sb.appendLine("[RECALLED MEMORIES — THIS TURN]")
-                recalled.forEach { mem ->
-                    sb.appendLine("- ${mem.content} [m_${mem.id.take(8)}]")
+        try {
+            val promoted = memoryRecaller.getPromotedMemories()
+            if (promoted.isNotEmpty()) {
+                sb.appendLine("[PROMOTED MEMORIES — PERMANENT]")
+                promoted.forEach { mem ->
+                    sb.appendLine("- ${mem.content}")
                 }
                 sb.appendLine()
             }
-        }
+        } catch (_: Exception) { /* memory not ready yet, skip */ }
+
+        // [RECALLED MEMORIES — THIS TURN]
+        try {
+            val lastUserMsg = messages.lastOrNull { it.role == "user" }?.content
+            if (lastUserMsg != null) {
+                val recalled = memoryRecaller.recall(lastUserMsg, topK = 8)
+                if (recalled.isNotEmpty()) {
+                    sb.appendLine("[RECALLED MEMORIES — THIS TURN]")
+                    recalled.forEach { mem ->
+                        sb.appendLine("- ${mem.content} [m_${mem.id.take(8)}]")
+                    }
+                    sb.appendLine()
+                }
+            }
+        } catch (_: Exception) { /* memory recall failed, skip */ }
 
         // [ACTIVE PROJECTS]
-        val projects = projectContextProvider.getActiveProjectsContext()
-        if (projects.isNotEmpty()) {
-            sb.appendLine("[ACTIVE PROJECTS]")
-            projects.forEach { proj ->
-                sb.appendLine("- ${proj.name}: ${proj.description}")
+        try {
+            val projects = projectContextProvider.getActiveProjectsContext()
+            if (projects.isNotEmpty()) {
+                sb.appendLine("[ACTIVE PROJECTS]")
+                projects.forEach { proj ->
+                    sb.appendLine("- ${proj.name}: ${proj.description}")
+                }
+                sb.appendLine()
             }
-            sb.appendLine()
-        }
+        } catch (_: Exception) { /* projects not ready, skip */ }
 
         // [CONTEXT]
         sb.appendLine("[CONTEXT]")

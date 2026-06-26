@@ -3,7 +3,6 @@ package com.babymomo.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -16,7 +15,9 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Do NOT use enableEdgeToEdge() — it causes blank space behind status bar
+        // because our TopAppBar inside Column doesn't handle insets properly.
+        // The dark theme already matches the system bars.
         setContent {
             BabymomoTheme {
                 Surface(
