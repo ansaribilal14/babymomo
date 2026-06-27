@@ -34,11 +34,13 @@ class LlmChain @Inject constructor(
         messages: List<Message>,
         tools: List<Tool> = emptyList()
     ): Flow<LlmChunk> = flow {
+        var responseComplete = false
+
         // Priority 1: On-device LiteRT — this IS Babymomo's brain
-        if (localProvider.isAvailable()) {
+        if (!responseComplete && localProvider.isAvailable()) {
             Log.d(TAG, "Trying on-device LiteRT...")
-            var providerFailed = false
             val tokens = StringBuilder()
+            var providerFailed = false
 
             try {
                 localProvider.streamChat(systemPrompt, messages, tools).collect { chunk ->
@@ -50,11 +52,10 @@ class LlmChain @Inject constructor(
                         is LlmChunk.Done -> {
                             if (tokens.isNotEmpty()) {
                                 Log.d(TAG, "On-device response complete (${tokens.length} chars)")
-                                emit(LlmChunk.Done)
-                                return@flow
+                                responseComplete = true
+                            } else {
+                                providerFailed = true
                             }
-                            // Got Done but no tokens — provider was empty, fall through
-                            providerFailed = true
                         }
                         is LlmChunk.Error -> {
                             Log.d(TAG, "On-device failed: ${chunk.message}")
@@ -68,14 +69,17 @@ class LlmChain @Inject constructor(
                 providerFailed = true
             }
 
-            if (!providerFailed && tokens.isNotEmpty()) return@flow
+            if (!providerFailed && tokens.isNotEmpty()) {
+                emit(LlmChunk.Done)
+                responseComplete = true
+            }
         }
 
         // Priority 2: User-configured remote (OpenAI / NVIDIA NIM / OpenRouter)
-        if (remoteProvider.isAvailable()) {
+        if (!responseComplete && remoteProvider.isAvailable()) {
             Log.d(TAG, "Trying user remote provider...")
-            var providerFailed = false
             val tokens = StringBuilder()
+            var providerFailed = false
 
             try {
                 remoteProvider.streamChat(systemPrompt, messages, tools).collect { chunk ->
@@ -87,10 +91,10 @@ class LlmChain @Inject constructor(
                         is LlmChunk.Done -> {
                             if (tokens.isNotEmpty()) {
                                 Log.d(TAG, "User remote response complete (${tokens.length} chars)")
-                                emit(LlmChunk.Done)
-                                return@flow
+                                responseComplete = true
+                            } else {
+                                providerFailed = true
                             }
-                            providerFailed = true
                         }
                         is LlmChunk.Error -> {
                             Log.d(TAG, "User remote failed: ${chunk.message}")
@@ -104,45 +108,59 @@ class LlmChain @Inject constructor(
                 providerFailed = true
             }
 
-            if (!providerFailed && tokens.isNotEmpty()) return@flow
+            if (!providerFailed && tokens.isNotEmpty()) {
+                emit(LlmChunk.Done)
+                responseComplete = true
+            }
         }
 
         // Priority 3: Fallback — the app MUST respond, never leave the user hanging
         // Free endpoint, no API key needed — works on FIRST LAUNCH
-        Log.d(TAG, "Trying free fallback provider...")
-        try {
+        if (!responseComplete) {
+            Log.d(TAG, "Trying free fallback provider...")
             var gotTokens = false
-            remoteProvider.streamWithFallback(systemPrompt, messages, tools).collect { chunk ->
-                when (chunk) {
-                    is LlmChunk.Token -> {
-                        gotTokens = true
-                        emit(chunk)
-                    }
-                    is LlmChunk.Done -> {
-                        if (gotTokens) {
-                            Log.d(TAG, "Fallback response complete")
+            var fallbackFailed = false
+
+            try {
+                remoteProvider.streamWithFallback(systemPrompt, messages, tools).collect { chunk ->
+                    when (chunk) {
+                        is LlmChunk.Token -> {
+                            gotTokens = true
+                            emit(chunk)
                         }
-                        emit(LlmChunk.Done)
-                        return@flow
+                        is LlmChunk.Done -> {
+                            if (gotTokens) {
+                                Log.d(TAG, "Fallback response complete")
+                            }
+                            responseComplete = true
+                        }
+                        is LlmChunk.Error -> {
+                            Log.d(TAG, "Fallback failed: ${chunk.message}")
+                            fallbackFailed = true
+                        }
+                        else -> { emit(chunk) }
                     }
-                    is LlmChunk.Error -> {
-                        Log.d(TAG, "Fallback failed: ${chunk.message}")
-                        // Don't re-throw — fall through to honest message
-                    }
-                    else -> { emit(chunk) }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Fallback exception: ${e.message}")
+                fallbackFailed = true
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Fallback exception: ${e.message}")
+
+            if (gotTokens) {
+                emit(LlmChunk.Done)
+                responseComplete = true
+            }
         }
 
         // Absolute last resort — this should almost never happen
-        emit(LlmChunk.Token(
-            "I'm Babymomo — your private AI companion. I'm still getting set up on your device. " +
-            "Please add an API key in Settings (OpenAI, NVIDIA NIM, or OpenRouter) and I'll start working immediately. " +
-            "An on-device model is also downloading in the background for full offline use."
-        ))
-        emit(LlmChunk.Done)
+        if (!responseComplete) {
+            emit(LlmChunk.Token(
+                "I'm Babymomo — your private AI companion. I'm still getting set up on your device. " +
+                "Please add an API key in Settings (OpenAI, NVIDIA NIM, or OpenRouter) and I'll start working immediately. " +
+                "An on-device model is also downloading in the background for full offline use."
+            ))
+            emit(LlmChunk.Done)
+        }
     }
 
     suspend fun complete(prompt: String): String {
