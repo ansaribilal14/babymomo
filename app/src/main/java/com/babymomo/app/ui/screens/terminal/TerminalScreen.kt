@@ -18,6 +18,7 @@ import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -33,7 +34,7 @@ class TerminalViewModel @Inject constructor(
     private val linuxSandbox: LinuxSandbox
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TerminalUiState(sandboxReady = linuxSandbox.isReady()))
-    val uiState: StateFlow<TerminalUiState> = _uiState
+    val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
 
     fun onInputChange(text: String) = _uiState.update { it.copy(inputText = text) }
 

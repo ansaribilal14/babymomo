@@ -7,7 +7,6 @@ import com.babymomo.app.data.db.entities.MemoryEntity
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.exp
-import kotlin.math.ln
 
 @Singleton
 class MemoryRecaller @Inject constructor(
@@ -26,7 +25,7 @@ class MemoryRecaller @Inject constructor(
 
         // Score each memory using 4-signal reranker
         val scored = allActive.map { memory ->
-            val cosineScore = vectorScores["mem_${memory.id}"]?.toDouble() ?: 0.4
+            val cosineScore = vectorScores[memory.id]?.toDouble() ?: 0.4
 
             val graphScore = calculateGraphProximity(query, memory)
             val confidenceScore = memory.confidence

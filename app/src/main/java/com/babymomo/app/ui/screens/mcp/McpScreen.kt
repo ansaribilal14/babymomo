@@ -18,6 +18,7 @@ import com.babymomo.app.ui.theme.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -29,7 +30,7 @@ class McpViewModel @Inject constructor(
     private val mcpServerRegistry: McpServerRegistry
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(McpUiState())
-    val uiState: StateFlow<McpUiState> = _uiState
+    val uiState: StateFlow<McpUiState> = _uiState.asStateFlow()
 
     fun showAddDialog() = _uiState.update { it.copy(showAddDialog = true) }
     fun hideAddDialog() = _uiState.update { it.copy(showAddDialog = false, newName = "", newUrl = "") }

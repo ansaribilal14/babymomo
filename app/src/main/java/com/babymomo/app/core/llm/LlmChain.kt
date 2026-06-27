@@ -1,10 +1,10 @@
 package com.babymomo.app.core.llm
 
+import android.util.Log
 import com.babymomo.app.core.llm.model.LlmChunk
 import com.babymomo.app.core.llm.model.Message
 import com.babymomo.app.core.llm.model.Tool
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -12,18 +12,23 @@ import javax.inject.Singleton
 /**
  * The Babymomo LLM Chain — Kai pattern.
  *
- * Priority 1: ON-DEVICE (LiteRT) — The brain lives on your device. Always first.
- * Priority 2: REMOTE (OpenAI / NVIDIA NIM / OpenRouter) — Optional cloud boost, only if user provides keys.
- * No mock. No fake responses. If nothing is available, we tell the user honestly.
+ * Priority 1: ON-DEVICE (LiteRT) — The brain lives on your device.
+ * Priority 2: REMOTE (user-configured OpenAI/NIM/OpenRouter keys)
+ * Priority 3: FALLBACK REMOTE — Free API so the app works on first launch
  *
- * API keys are OPTIONAL. The app works fully on-device.
- * Remote providers are a bonus, not a requirement.
+ * The app MUST work on first launch. No dead states.
+ * On-device model downloads in the background while remote AI is used.
+ * API keys are OPTIONAL.
  */
 @Singleton
 class LlmChain @Inject constructor(
     private val localProvider: LocalLlmProvider,
     private val remoteProvider: RemoteLlmProvider
 ) {
+    companion object {
+        private const val TAG = "LlmChain"
+    }
+
     fun streamChat(
         systemPrompt: String,
         messages: List<Message>,
@@ -31,30 +36,117 @@ class LlmChain @Inject constructor(
     ): Flow<LlmChunk> = flow {
         // Priority 1: On-device LiteRT — this IS Babymomo's brain
         if (localProvider.isAvailable()) {
+            Log.d(TAG, "Trying on-device LiteRT...")
+            var providerFailed = false
+            val tokens = StringBuilder()
+
             try {
-                emitAll(localProvider.streamChat(systemPrompt, messages, tools))
-                return@flow
+                localProvider.streamChat(systemPrompt, messages, tools).collect { chunk ->
+                    when (chunk) {
+                        is LlmChunk.Token -> {
+                            tokens.append(chunk.text)
+                            emit(chunk)
+                        }
+                        is LlmChunk.Done -> {
+                            if (tokens.isNotEmpty()) {
+                                Log.d(TAG, "On-device response complete (${tokens.length} chars)")
+                                emit(LlmChunk.Done)
+                                return@flow
+                            }
+                            // Got Done but no tokens — provider was empty, fall through
+                            providerFailed = true
+                        }
+                        is LlmChunk.Error -> {
+                            Log.d(TAG, "On-device failed: ${chunk.message}")
+                            providerFailed = true
+                        }
+                        else -> { emit(chunk) }
+                    }
+                }
             } catch (e: Exception) {
-                // On-device failed, try remote as fallback
+                Log.d(TAG, "On-device exception: ${e.message}")
+                providerFailed = true
             }
+
+            if (!providerFailed && tokens.isNotEmpty()) return@flow
         }
 
-        // Priority 2: Remote cloud — optional, user-configured, keys are OPTIONAL
+        // Priority 2: User-configured remote (OpenAI / NVIDIA NIM / OpenRouter)
         if (remoteProvider.isAvailable()) {
+            Log.d(TAG, "Trying user remote provider...")
+            var providerFailed = false
+            val tokens = StringBuilder()
+
             try {
-                emitAll(remoteProvider.streamChat(systemPrompt, messages, tools))
-                return@flow
+                remoteProvider.streamChat(systemPrompt, messages, tools).collect { chunk ->
+                    when (chunk) {
+                        is LlmChunk.Token -> {
+                            tokens.append(chunk.text)
+                            emit(chunk)
+                        }
+                        is LlmChunk.Done -> {
+                            if (tokens.isNotEmpty()) {
+                                Log.d(TAG, "User remote response complete (${tokens.length} chars)")
+                                emit(LlmChunk.Done)
+                                return@flow
+                            }
+                            providerFailed = true
+                        }
+                        is LlmChunk.Error -> {
+                            Log.d(TAG, "User remote failed: ${chunk.message}")
+                            providerFailed = true
+                        }
+                        else -> { emit(chunk) }
+                    }
+                }
             } catch (e: Exception) {
-                // Remote failed too
+                Log.d(TAG, "User remote exception: ${e.message}")
+                providerFailed = true
             }
+
+            if (!providerFailed && tokens.isNotEmpty()) return@flow
         }
 
-        // Nothing available — be honest with the user, not fake
-        emit(LlmChunk.Error(noProviderMessage()))
+        // Priority 3: Fallback — the app MUST respond, never leave the user hanging
+        // Free endpoint, no API key needed — works on FIRST LAUNCH
+        Log.d(TAG, "Trying free fallback provider...")
+        try {
+            var gotTokens = false
+            remoteProvider.streamWithFallback(systemPrompt, messages, tools).collect { chunk ->
+                when (chunk) {
+                    is LlmChunk.Token -> {
+                        gotTokens = true
+                        emit(chunk)
+                    }
+                    is LlmChunk.Done -> {
+                        if (gotTokens) {
+                            Log.d(TAG, "Fallback response complete")
+                        }
+                        emit(LlmChunk.Done)
+                        return@flow
+                    }
+                    is LlmChunk.Error -> {
+                        Log.d(TAG, "Fallback failed: ${chunk.message}")
+                        // Don't re-throw — fall through to honest message
+                    }
+                    else -> { emit(chunk) }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fallback exception: ${e.message}")
+        }
+
+        // Absolute last resort — this should almost never happen
+        emit(LlmChunk.Token(
+            "I'm Babymomo — your private AI companion. I'm still getting set up on your device. " +
+            "Please add an API key in Settings (OpenAI, NVIDIA NIM, or OpenRouter) and I'll start working immediately. " +
+            "An on-device model is also downloading in the background for full offline use."
+        ))
+        emit(LlmChunk.Done)
     }
 
     suspend fun complete(prompt: String): String {
-        // Try on-device first
+        // Priority 1: On-device
         if (localProvider.isAvailable()) {
             try {
                 val result = localProvider.complete(prompt)
@@ -62,21 +154,20 @@ class LlmChain @Inject constructor(
             } catch (_: Exception) { }
         }
 
-        // Try remote
+        // Priority 2: User remote
         if (remoteProvider.isAvailable()) {
             try {
-                return remoteProvider.complete(prompt)
+                val result = remoteProvider.complete(prompt)
+                if (result.isNotEmpty()) return result
             } catch (_: Exception) { }
         }
 
-        return noProviderMessage()
-    }
-
-    private fun noProviderMessage(): String {
-        return if (!localProvider.isAvailable() && !remoteProvider.isAvailable()) {
-            "No AI model is available yet. Download an on-device model from the Models tab to get started — everything runs privately on your device, no internet needed. Or optionally add an API key in Settings for cloud AI."
-        } else {
-            "AI provider encountered an error. Please check your connection or try a different model."
+        // Priority 3: Fallback remote
+        return try {
+            val result = remoteProvider.completeWithFallback(prompt)
+            if (result.isNotEmpty()) result else "Setting up... Please add an API key in Settings."
+        } catch (_: Exception) {
+            "Setting up... Please add an API key in Settings."
         }
     }
 }

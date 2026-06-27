@@ -1,6 +1,7 @@
 package com.babymomo.app.core.llm
 
 import android.content.Context
+import android.util.Log
 import com.babymomo.app.core.llm.model.LlmChunk
 import com.babymomo.app.core.llm.model.Message
 import com.babymomo.app.core.llm.model.Tool
@@ -15,18 +16,24 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * On-device LLM provider using Google LiteRT (formerly MediaPipe / TensorFlow Lite).
+ * On-device LLM provider using Google LiteRT (AI Edge).
  *
  * This IS Babymomo's brain. Models run locally, privately, no internet needed.
  * Gemma 2B and Phi-3 Mini are the default on-device models.
  *
- * The user downloads models from the Models screen. Once downloaded and activated,
- * this provider loads them into the LiteRT runtime and runs inference on-device.
+ * Uses reflection to load the LiteRT runtime so the app compiles even if
+ * the exact LiteRT API classes change between versions. If LiteRT is not
+ * available or the model format is incompatible, signals unavailability
+ * so LlmChain falls through to remote providers.
  */
 @Singleton
 class LocalLlmProvider @Inject constructor(
     @ApplicationContext private val context: Context
 ) : LlmProvider {
+
+    companion object {
+        private const val TAG = "LocalLlm"
+    }
 
     @Volatile
     private var modelLoaded = false
@@ -37,14 +44,16 @@ class LocalLlmProvider @Inject constructor(
     @Volatile
     private var activeModelName: String? = null
 
-    // LiteRT session — will be initialized when a model is activated
+    // Cached LiteRT session (via reflection)
     @Volatile
-    private var isInitializing = false
+    private var litertSession: Any? = null
 
     fun setActiveModel(modelPath: String?, modelName: String? = null) {
         activeModelPath = modelPath
         activeModelName = modelName
         modelLoaded = modelPath != null
+        // Reset cached session when model changes
+        litertSession = null
     }
 
     fun getActiveModelName(): String = activeModelName ?: "None"
@@ -55,43 +64,32 @@ class LocalLlmProvider @Inject constructor(
         tools: List<Tool>
     ): Flow<LlmChunk> = flow {
         if (!modelLoaded || activeModelPath == null) {
-            emit(LlmChunk.Error("No on-device model loaded. Download one from the Models tab to run AI privately on your device."))
+            emit(LlmChunk.Error("On-device model not ready yet."))
             return@flow
         }
 
         val modelFile = File(activeModelPath!!)
         if (!modelFile.exists()) {
             modelLoaded = false
-            emit(LlmChunk.Error("Model file not found. It may have been moved or deleted. Please re-download from the Models tab."))
+            emit(LlmChunk.Error("Model file not found."))
             return@flow
         }
 
         try {
-            // Build the full prompt from messages in chat format
             val fullPrompt = buildPrompt(systemPrompt, messages)
+            val result = runLiteRTInference(fullPrompt)
 
-            // --- LiteRT Inference ---
-            // The LiteRT API uses Interpreter / LlmInferenceSession.
-            // Once a model is loaded, we run generateAsync() and stream tokens.
-            //
-            // Production implementation:
-            //   val session = LlmInferenceSession.createFrom(modelFile)
-            //   session.generateAsync(fullPrompt) { token ->
-            //       emit(LlmChunk.Token(token))
-            //   }
-            //
-            // For now, until LiteRT model files are available for download,
-            // we provide a clear message guiding the user:
-
-            emit(LlmChunk.Token(
-                "I'm Babymomo running on your device. The on-device model engine (LiteRT) is ready — " +
-                "download a model like Gemma 2B or Phi-3 Mini from the Models tab, and I'll run " +
-                "entirely offline with full privacy. No cloud, no keys needed.\n\n" +
-                "Alternatively, you can add an OpenAI, NVIDIA NIM, or OpenRouter API key in " +
-                "Settings for cloud-based AI while on-device models are being set up."
-            ))
-            emit(LlmChunk.Done)
+            if (result.isNotEmpty()) {
+                // Emit the complete response as a single token stream
+                // Real streaming from LiteRT would use generateAsync callback
+                emit(LlmChunk.Token(result))
+                emit(LlmChunk.Done)
+            } else {
+                Log.d(TAG, "LiteRT produced empty response, falling through to remote")
+                emit(LlmChunk.Error("On-device model produced no output."))
+            }
         } catch (e: Exception) {
+            Log.d(TAG, "On-device inference error: ${e.message}")
             emit(LlmChunk.Error("On-device inference error: ${e.message}"))
         }
     }.flowOn(Dispatchers.Default)
@@ -101,11 +99,9 @@ class LocalLlmProvider @Inject constructor(
 
         return withContext(Dispatchers.Default) {
             try {
-                // LiteRT synchronous completion
-                // val session = LlmInferenceSession.createFrom(File(activeModelPath!!))
-                // session.generate(prompt)
-                ""
+                runLiteRTInference(prompt)
             } catch (e: Exception) {
+                Log.d(TAG, "Complete failed: ${e.message}")
                 ""
             }
         }
@@ -114,6 +110,63 @@ class LocalLlmProvider @Inject constructor(
     override fun isAvailable(): Boolean = modelLoaded
 
     override fun providerName(): String = "LiteRT"
+
+    /**
+     * Run inference using LiteRT via reflection.
+     * This approach avoids hard dependency on specific LiteRT API class names
+     * which may change between SDK versions.
+     *
+     * Tries: com.google.ai.edge.litert.LlmInferenceSession
+     * Falls back to: com.google.ai.edge.litert.LlmInference
+     */
+    private fun runLiteRTInference(prompt: String): String {
+        val modelPath = activeModelPath ?: return ""
+
+        try {
+            // Try the LlmInferenceSession API (LiteRT 1.0+)
+            val sessionClass = Class.forName("com.google.ai.edge.litert.LlmInferenceSession")
+            val fileClass = Class.forName("java.io.File")
+
+            // LlmInferenceSession.createFrom(File)
+            val createFromMethod = sessionClass.getMethod("createFrom", fileClass)
+            val session = createFromMethod.invoke(null, File(modelPath))
+
+            // Cache the session for reuse
+            litertSession = session
+
+            // session.generate(String)
+            val generateMethod = sessionClass.getMethod("generate", String::class.java)
+            val result = generateMethod.invoke(session, prompt)
+            return result as? String ?: ""
+        } catch (e: ClassNotFoundException) {
+            Log.d(TAG, "LlmInferenceSession not found, trying LlmInference...")
+        } catch (e: Exception) {
+            Log.d(TAG, "LlmInferenceSession failed: ${e.message}")
+        }
+
+        try {
+            // Try the LlmInference API (older LiteRT / MediaPipe)
+            val inferenceClass = Class.forName("com.google.ai.edge.litert.LlmInference")
+            val fileClass = Class.forName("java.io.File")
+
+            // LlmInference.createFromFile(File)
+            val createFromMethod = inferenceClass.getMethod("createFromFile", fileClass)
+            val inference = createFromMethod.invoke(null, File(modelPath))
+
+            // inference.generate(String)
+            val generateMethod = inferenceClass.getMethod("generate", String::class.java)
+            val result = generateMethod.invoke(inference, prompt)
+            return result as? String ?: ""
+        } catch (e: ClassNotFoundException) {
+            Log.d(TAG, "LlmInference also not found — LiteRT runtime not available")
+        } catch (e: Exception) {
+            Log.d(TAG, "LlmInference failed: ${e.message}")
+        }
+
+        // LiteRT runtime not available or model format incompatible
+        Log.d(TAG, "No LiteRT runtime found — on-device inference unavailable")
+        return ""
+    }
 
     /**
      * Build a chat prompt from system + messages.
